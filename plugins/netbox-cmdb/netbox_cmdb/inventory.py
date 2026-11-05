@@ -467,7 +467,12 @@ def overview(user):
 
     data = {
         "clusters": [
-            {"name": c.name, "hosts": c.virtual_machines.count()} for c in _restrict(Cluster.objects.all(), user)
+            {
+                "name": c.name,
+                "nodes": _restrict(Device.objects.filter(cluster=c), user).count(),
+                "virtual_machines": _restrict(c.virtual_machines.all(), user).count(),
+            }
+            for c in _restrict(Cluster.objects.all(), user)
         ],
         "counts": {
             "virtual_machines": _restrict(VirtualMachine.objects.all(), user).count(),

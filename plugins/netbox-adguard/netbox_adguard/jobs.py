@@ -20,6 +20,7 @@ KEYS = (
     "auto_create_zones",
     "nameserver",
     "record_tag",
+    "assign_ips",
 )
 
 

@@ -36,6 +36,7 @@ class SyncResult:
     dns_records_updated: int = 0
     dns_records_deleted: int = 0
     dns_errors: list = field(default_factory=list)
+    ips_assigned: list = field(default_factory=list)
 
     def as_dict(self):
         return asdict(self)
@@ -208,6 +209,29 @@ def mirror_to_netbox_dns(settings, result):
 # --------------------------------------------------------------------------- main
 
 
+def assign_host_ips(by_domain):
+    """A host without IPv4 (VM without QEMU agent, Proxmox node...) gets the IP of a
+    rewrite named after it: "homeass.local -> 192.168.1.6" for the VM "HomeAss"."""
+    from dcim.models import Device
+    from netbox_cmdb.enrich import assign_ip
+    from virtualization.models import VirtualMachine
+
+    done = []
+    for domain, answer in sorted(by_domain.items()):
+        if answer_type(answer) != AnswerTypeChoices.A:
+            continue
+        label = domain.split(".")[0]
+        for model in (VirtualMachine, Device):
+            hosts = list(model.objects.filter(name__iexact=label)[:2])
+            if len(hosts) != 1:
+                continue  # unknown or ambiguous name
+            msg = assign_ip(hosts[0], answer, f"AdGuard rewrite {domain}")
+            if msg:
+                done.append(msg)
+            break
+    return done
+
+
 def sync(clients, settings, log=logger):
     """``clients``: list of objects with ``base_url`` and ``rewrites()`` (AdGuardClient or test double)."""
     from virtualization.models import VirtualMachine
@@ -231,6 +255,9 @@ def sync(clients, settings, log=logger):
         for r in rewrites:
             if r["enabled"]:
                 by_domain.setdefault(r["domain"], r["answer"])
+
+    if settings.get("assign_ips", True) and apps.is_installed("netbox_cmdb"):
+        result.ips_assigned = assign_host_ips(by_domain)
 
     with transaction.atomic():
         seen = []
