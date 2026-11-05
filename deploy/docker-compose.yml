@@ -64,6 +64,21 @@ x-netbox-env: &netbox-env
   CMDB_TOKEN_ORB_AGENT: ${CMDB_TOKEN_ORB_AGENT:-}
   CMDB_TOKEN_NGINX_AGENT: ${CMDB_TOKEN_NGINX_AGENT:-}
   CMDB_TOKEN_ZABBIX: ${CMDB_TOKEN_ZABBIX:-}
+  CMDB_TOKEN_DOCKER_AGENT: ${CMDB_TOKEN_DOCKER_AGENT:-}
+  CMDB_TOKEN_MCP: ${CMDB_TOKEN_MCP:-}
+  # AdGuard Home (DNS rewrites -> NetBox + netbox-plugin-dns)
+  ADGUARD_URLS: ${ADGUARD_URLS:-}
+  ADGUARD_USERNAME: ${ADGUARD_USERNAME:-}
+  ADGUARD_PASSWORD: ${ADGUARD_PASSWORD:-}
+  ADGUARD_VERIFY_SSL: ${ADGUARD_VERIFY_SSL:-true}
+  ADGUARD_SYNC_INTERVAL: ${ADGUARD_SYNC_INTERVAL:-1440}
+  ADGUARD_SYNC_NETBOX_DNS: ${ADGUARD_SYNC_NETBOX_DNS:-true}
+  ADGUARD_AUTO_CREATE_ZONES: ${ADGUARD_AUTO_CREATE_ZONES:-true}
+  # Docker hosts expected to report (one agent each), for health / Zabbix
+  DOCKER_AGENT_HOSTS: ${DOCKER_AGENT_HOSTS:-${DOCKER_AGENT_HOST_NAME:-docker}}
+  # MCP server
+  MCP_DEFAULT_PREFIX: ${MCP_DEFAULT_PREFIX:-192.168.1.0/24}
+  MCP_RESERVED_IP_RANGES: ${MCP_RESERVED_IP_RANGES:-}
 
 services:
   # ---------------------------------------------------------------- NetBox
@@ -325,6 +340,24 @@ services:
     depends_on:
       - diode-gateway
       - netbox
+
+  # ---------------------------------------------------------- Docker inventory
+  # Describes this Docker host (containers, stacks, internal networks, volumes).
+  # Read-only Docker socket; for other Docker hosts use deploy/docker-agent.compose.yml.
+  docker-agent:
+    image: ghcr.io/joblinours/netbox-cmdb-docker-agent:${CMDB_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      NETBOX_URL: http://netbox:8080
+      NETBOX_TOKEN: ${CMDB_TOKEN_DOCKER_AGENT:-}
+      DOCKER_AGENT_HOST_NAME: ${DOCKER_AGENT_HOST_NAME:-docker}
+      DOCKER_AGENT_ADDRESSES: ${DOCKER_HOST_IP:-}
+      DOCKER_AGENT_INTERVAL: ${DOCKER_AGENT_INTERVAL:-3600}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      netbox:
+        condition: service_healthy
 
 volumes:
   netbox-media:

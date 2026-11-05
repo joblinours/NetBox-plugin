@@ -5,6 +5,7 @@ from .models import PublicHostname, Tunnel
 
 
 class TunnelTable(NetBoxTable):
+    actions = columns.ActionsColumn(actions=("delete", "changelog"))
     name = tables.Column(linkify=True)
     hostname_count = columns.LinkedCountColumn(
         viewname="plugins:netbox_cloudflare_tunnel:publichostname_list",
@@ -19,6 +20,7 @@ class TunnelTable(NetBoxTable):
 
 
 class PublicHostnameTable(NetBoxTable):
+    actions = columns.ActionsColumn(actions=("delete", "changelog"))
     hostname = tables.Column(linkify=True)
     tunnel = tables.Column(linkify=True)
     exposure = columns.ChoiceFieldColumn()

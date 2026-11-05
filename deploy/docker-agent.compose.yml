@@ -1,0 +1,22 @@
+# CMDB Docker agent for an additional Docker host (one stack per host).
+# Deploy in Portainer on that environment, with these variables:
+#   NETBOX_URL=http://192.168.1.13:8000
+#   CMDB_TOKEN_DOCKER_AGENT=<same value as in the CMDB stack>
+#   DOCKER_AGENT_HOST_NAME=<name of this VM in NetBox>
+#   DOCKER_AGENT_ADDRESSES=<IP of this host>
+# Add DOCKER_AGENT_HOST_NAME to DOCKER_AGENT_HOSTS in the CMDB stack so Zabbix
+# alerts when this agent stops reporting.
+name: cmdb-docker-agent
+
+services:
+  docker-agent:
+    image: ghcr.io/joblinours/netbox-cmdb-docker-agent:${CMDB_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      NETBOX_URL: ${NETBOX_URL:?NETBOX_URL is required}
+      NETBOX_TOKEN: ${CMDB_TOKEN_DOCKER_AGENT:?CMDB_TOKEN_DOCKER_AGENT is required}
+      DOCKER_AGENT_HOST_NAME: ${DOCKER_AGENT_HOST_NAME:?DOCKER_AGENT_HOST_NAME is required}
+      DOCKER_AGENT_ADDRESSES: ${DOCKER_AGENT_ADDRESSES:-}
+      DOCKER_AGENT_INTERVAL: ${DOCKER_AGENT_INTERVAL:-3600}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro

@@ -8,6 +8,11 @@ Everything needed to run the homelab CMDB: NetBox as the source of truth, filled
 | --- | --- |
 | `plugins/netbox-cloudflare-tunnel/` | Home-made plugin: syncs Cloudflare Tunnel public hostnames and records, for each, the exposure path (cloudflared direct or via Nginx) and the target service |
 | `plugins/netbox-cmdb/` | Home-made plugin: base data model (custom fields), service accounts and tokens, scheduled Proxmox sync, source health for Zabbix |
+| `plugins/netbox-cmdb-mcp/` | Home-made plugin: read-only MCP server for Claude Code (hosts, used/free IPs and ports, URLs, DNS, containers) |
+| `plugins/netbox-cmdb-export/` | Home-made plugin: CMDB export as Markdown, PDF, JSON, and topology graph (Mermaid / PNG / SVG) |
+| `plugins/netbox-adguard/` | Home-made plugin: AdGuard Home DNS rewrites → local names in NetBox and netbox-plugin-dns |
+| `plugins/netbox-docker-inventory/` | Home-made plugin: Docker hosts, stacks, containers (even silent ones), internal networks, ports, volumes |
+| `agents/docker-agent/` | Docker agent (in the stack for the LXC; `deploy/docker-agent.compose.yml` for every other Docker host) |
 | `agents/nginx-agent/` | Discovery agent installed on `revers-proxy`: reads `nginx -T` and pushes virtual hosts to NetBox through Diode |
 | `image/netbox/` | NetBox image recipe (official image + third-party plugins + home-made plugins) |
 | `image/diode-gateway/`, `image/diode-bootstrap/`, `image/orb-agent/` | Small images carrying the Diode and orb-agent configuration (so nothing lives on the host) |
@@ -30,6 +35,11 @@ Only two ports are published: the NetBox UI/API (`NETBOX_PORT`, 8000) and the Di
 | Network scan | orb-agent (nmap) → Diode. One scan at start-up, then nightly (`SCAN_SCHEDULE`). Live IPs + open ports (in the IP comments) | daily | `network-scan` |
 | Cloudflare | `netbox-cloudflare-tunnel` plugin: reads the ingress of dashboard-managed tunnels (read-only token), finds or creates the target service and sets `URL publique` / `Chemin d'exposition` | `CLOUDFLARE_SYNC_INTERVAL` (1440 min) | `cloudflare` |
 | Nginx | `cmdb-nginx-agent` on revers-proxy (systemd timer) → Diode. One service per `server_name`, with ports and upstream (`proxy_pass`) | daily | `nginx` |
+
+| AdGuard Home | `netbox-adguard`: DNS rewrites → IP/host (`local_domains` custom field) and A/CNAME records in netbox-plugin-dns | `ADGUARD_SYNC_INTERVAL` (1440 min) | `adguard` |
+| Docker | `cmdb-docker-agent` on each Docker host → `netbox-docker-inventory` (containers, stacks, internal networks; published ports become NetBox services with the Portainer stack) | hourly | `docker-<host>` |
+
+**Claude Code (MCP)**: `claude mcp add --transport http --scope user cmdb http://192.168.1.13:8000/api/plugins/mcp/ --header "Authorization: Bearer <CMDB_TOKEN_MCP>"`. **Export**: *Plugins > Export CMDB* or `GET /api/plugins/export/<md|pdf|json|mmd|png|svg>/`.
 
 Exposure path: when the origin of a Cloudflare hostname is the revers-proxy IP (`NGINX_PROXY_HOSTS`) the hostname is "via Nginx"; the plugin finds the vhost pushed by the Nginx agent, reads its upstream and attaches the public URL to the final service (e.g. `cloud.example.com` → revers-proxy:443 → nextcloud:11000). Otherwise it is "cloudflared direct" and attached to the service of the origin VM. All sources are idempotent.
 
@@ -54,7 +64,7 @@ The admin account is only created when it does not exist yet; afterwards change 
 
 ## Adding a plugin
 
-- **PyPI plugin**: add `package==version` to `image/netbox/plugin_requirements.txt`, its name to `PLUGINS` and its settings to `PLUGINS_CONFIG` in `image/netbox/config/plugins.py` (secrets read from the environment), bump `expected = 10` in the workflow, push.
+- **PyPI plugin**: add `package==version` to `image/netbox/plugin_requirements.txt`, its name to `PLUGINS` and its settings to `PLUGINS_CONFIG` in `image/netbox/config/plugins.py` (secrets read from the environment), bump `expected = 14` in the workflow, push.
 - **Home-made plugin**: create `plugins/<name>/` (Python package with `pyproject.toml`, README, MIT licence, tests in `<module>/tests/`), add it to the `uv pip install` line of the Dockerfile, to `PLUGINS`, and to the workflow's `manage.py test` command.
 
 ## Changing a secret

@@ -8,6 +8,11 @@ LABEL org.opencontainers.image.source="https://github.com/joblinours/NetBox-plug
       org.opencontainers.image.description="NetBox CMDB homelab (NetBox + Diode plugin + homelab plugins)" \
       org.opencontainers.image.licenses="MIT"
 
+# Graphviz (topology PNG/SVG export) and a Unicode font for the PDF export.
+RUN apt-get update -qq \
+ && apt-get install -y --no-install-recommends graphviz fonts-dejavu-core \
+ && rm -rf /var/lib/apt/lists/*
+
 # Third-party plugins. NetBox's own requirements are used as constraints so a
 # plugin can never silently upgrade a NetBox dependency.
 COPY image/netbox/plugin_requirements.txt /opt/netbox/plugin_requirements.txt
@@ -20,6 +25,10 @@ RUN --mount=type=secret,id=ca,required=false \
       -r /opt/netbox/plugin_requirements.txt \
       /opt/netbox/local_plugins/netbox-cloudflare-tunnel \
       /opt/netbox/local_plugins/netbox-cmdb \
+      /opt/netbox/local_plugins/netbox-adguard \
+      /opt/netbox/local_plugins/netbox-docker-inventory \
+      /opt/netbox/local_plugins/netbox-cmdb-export \
+      /opt/netbox/local_plugins/netbox-cmdb-mcp \
  && rm -rf /opt/netbox/local_plugins
 
 COPY image/netbox/config/plugins.py /etc/netbox/config/plugins.py

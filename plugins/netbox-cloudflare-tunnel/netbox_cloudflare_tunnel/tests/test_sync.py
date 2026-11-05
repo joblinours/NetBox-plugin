@@ -162,3 +162,16 @@ class SyncTest(TestCase):
         self.assertEqual(obj.exposure, "nginx")
         self.assertIsNone(obj.proxy_service)
         self.assertIn("not reported", obj.resolution)
+
+    def test_ui_pages(self):
+        from users.models import User
+
+        sync(FakeClient(self._ingress()), SETTINGS)
+        self.client.force_login(User.objects.create_superuser("admin", "a@b.c", "pw"))
+        for url in (
+            "/plugins/cloudflare-tunnel/tunnels/",
+            "/plugins/cloudflare-tunnel/hostnames/",
+            Tunnel.objects.get().get_absolute_url(),
+            PublicHostname.objects.first().get_absolute_url(),
+        ):
+            self.assertEqual(self.client.get(url).status_code, 200, url)

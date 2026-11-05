@@ -8,9 +8,14 @@ Ce dépôt contient tout ce qu'il faut pour faire tourner la CMDB du homelab : N
 | --- | --- |
 | `plugins/netbox-cloudflare-tunnel/` | Plugin maison : synchronise les hostnames publics des tunnels Cloudflare et indique pour chacun le chemin d'exposition (cloudflared direct ou via Nginx) et le service cible |
 | `plugins/netbox-cmdb/` | Plugin maison : modèle de données de base (custom fields), comptes de service et tokens, sync Proxmox planifiée, santé des sources pour Zabbix |
+| `plugins/netbox-cmdb-mcp/` | Plugin maison : serveur MCP en lecture seule pour Claude Code (hôtes, IPs et ports pris/libres, URLs, DNS, conteneurs) |
+| `plugins/netbox-cmdb-export/` | Plugin maison : export de la CMDB en Markdown, PDF, JSON, et graphe topologique Mermaid / PNG / SVG |
+| `plugins/netbox-adguard/` | Plugin maison : réécritures DNS d'AdGuard Home → noms locaux dans NetBox et dans netbox-plugin-dns |
+| `plugins/netbox-docker-inventory/` | Plugin maison : hôtes Docker, stacks, conteneurs (même silencieux), réseaux internes, ports, volumes |
 | `agents/nginx-agent/` | Agent de discovery installé sur `revers-proxy` : lit `nginx -T` et pousse les vhosts dans NetBox via Diode |
+| `agents/docker-agent/` | Agent Docker (dans la stack pour le LXC, et `deploy/docker-agent.compose.yml` pour chaque autre hôte Docker) |
 | `image/netbox/` | Recette de l'image NetBox (image officielle + plugins tiers + plugins maison) |
-| `image/diode-gateway/`, `image/diode-bootstrap/`, `image/orb-agent/` | Petites images qui embarquent la configuration de Diode et d'orb-agent (pour ne rien déposer sur l'hôte) |
+| `image/diode-gateway/`, `image/diode-bootstrap/`, `image/orb-agent/`, `image/docker-agent/` | Petites images qui embarquent la configuration de Diode et d'orb-agent (pour ne rien déposer sur l'hôte) |
 | `deploy/` | Fichier de stack (`docker-compose.yml`) et exemple de variables (`stack.env.example`) |
 | `tools/generate-env.py` | Génère toutes les variables de la stack avec des secrets aléatoires |
 | `monitoring/zabbix/` | Template Zabbix 7.0 (disponibilité NetBox/API/Diode et échec de chaque source) |
@@ -41,9 +46,17 @@ Seuls deux ports sont publiés : l'interface NetBox (`NETBOX_PORT`, 8000) et l'e
 | Cloudflare | Plugin `netbox-cloudflare-tunnel` : lit l'ingress des tunnels gérés dans le dashboard (token lecture seule), crée ou retrouve le service cible et renseigne `URL publique` et `Chemin d'exposition` | `CLOUDFLARE_SYNC_INTERVAL` (1440 min) | source `cloudflare` |
 | Nginx | `cmdb-nginx-agent` sur revers-proxy (timer systemd) → Diode. Un service par `server_name`, avec ports et cible amont (`proxy_pass`) | quotidienne | source `nginx` |
 
+| AdGuard Home | Plugin `netbox-adguard` : réécritures DNS → IP/hôte (custom field « Domaines locaux ») et enregistrements A/CNAME dans netbox-plugin-dns | `ADGUARD_SYNC_INTERVAL` (1440 min) | source `adguard` |
+| Docker | `cmdb-docker-agent` sur chaque hôte Docker → plugin `netbox-docker-inventory` (conteneurs, stacks, réseaux internes, ports publiés → services NetBox avec « Stack Portainer ») | toutes les heures | source `docker-<hôte>` |
+
 Comment le chemin d'exposition est déterminé : si l'origine d'un hostname Cloudflare est l'IP de revers-proxy (`NGINX_PROXY_HOSTS`), le hostname est « via Nginx » ; le plugin retrouve le vhost poussé par l'agent Nginx, lit sa cible amont et rattache l'URL publique au service final (par exemple `cloud.example.com` → revers-proxy:443 → nextcloud:11000). Sinon il est « cloudflared direct » et rattaché au service de la VM d'origine. Le plugin crée le service s'il n'existe pas sur le port d'origine.
 
 Toutes les sources sont idempotentes : une deuxième exécution ne crée aucun doublon (vérifié par les tests et sur une stack réelle).
+
+## Utiliser la CMDB
+
+- **Claude Code (MCP)** : `claude mcp add --transport http --scope user cmdb http://192.168.1.13:8000/api/plugins/mcp/ --header "Authorization: Bearer <CMDB_TOKEN_MCP>"`. Claude peut alors vérifier un port ou une IP, proposer des ports/IPs libres, lire la fiche d'un hôte, lister les URLs, noms DNS et conteneurs. Détails : [plugins/netbox-cmdb-mcp/README.md](plugins/netbox-cmdb-mcp/README.md).
+- **Export** : menu *Plugins > Export CMDB* (Markdown, PDF, JSON, graphe Mermaid / PNG / SVG), ou `GET /api/plugins/export/<format>/` avec un token. Détails : [plugins/netbox-cmdb-export/README.md](plugins/netbox-cmdb-export/README.md).
 
 ## Déploiement (première fois)
 
@@ -63,7 +76,8 @@ Toutes les sources sont idempotentes : une deuxième exécution ne crée aucun d
 4. **Premier démarrage** (quelques minutes, migrations comprises) : NetBox applique les migrations, crée le compte admin, puis `cmdb_bootstrap` crée les custom fields, les comptes de service `svc-*` avec leurs tokens et l'endpoint Proxmox. Les clients OAuth2 de Diode sont créés par `diode-bootstrap`.
 5. **Vérifier** : se connecter sur `http://192.168.1.13:8000` ; `Diode > Settings` affiche la cible Diode et `Diode > Client Credentials` s'ouvre sans erreur (preuve que NetBox s'authentifie auprès de Diode) ; `CMDB > Source health` liste l'état de chaque source. Les clients OAuth2 créés par la stack (`orb-agent`, `nginx-agent`) sont gérés par les variables et n'apparaissent pas dans cette liste, qui ne montre que les clients créés depuis l'interface.
 6. **Installer l'agent Nginx** sur revers-proxy : voir [agents/nginx-agent/README.md](agents/nginx-agent/README.md).
-7. **Zabbix** : importer `monitoring/zabbix/cmdb_netbox_template.yaml`, l'associer à l'hôte de la CMDB et renseigner la macro `{$CMDB.TOKEN}` avec `CMDB_TOKEN_ZABBIX`.
+7. **Agents Docker** sur les autres hôtes Docker : voir [agents/docker-agent/README.md](agents/docker-agent/README.md) (celui du LXC tourne déjà dans la stack).
+8. **Zabbix** : importer `monitoring/zabbix/cmdb_netbox_template.yaml`, l'associer à l'hôte de la CMDB et renseigner la macro `{$CMDB.TOKEN}` avec `CMDB_TOKEN_ZABBIX`.
 
 > Le compte admin n'est créé qu'au premier démarrage : s'il existe déjà, il n'est plus touché (changer son mot de passe dans NetBox, pas dans la variable).
 
@@ -79,7 +93,10 @@ Toutes les variables sont listées et commentées dans [deploy/stack.env.example
 | `PROXMOX_*` | Endpoint Proxmox (un seul nœud suffit, tout le cluster est lu) |
 | `CLOUDFLARE_*`, `NGINX_PROXY_HOSTS` | Plugin Cloudflare et détection du passage par Nginx |
 | `SCAN_*` | Cibles, planification et profondeur du scan orb-agent |
-| `CMDB_TOKEN_*` | Un token API NetBox par consommateur (orb-agent, agent Nginx, Zabbix), droits minimum |
+| `CMDB_TOKEN_*` | Un token API NetBox par consommateur (orb-agent, agent Nginx, agents Docker, Zabbix, MCP en lecture seule), droits minimum |
+| `ADGUARD_*` | Instances AdGuard Home et identifiants |
+| `DOCKER_AGENT_HOST_NAME`, `DOCKER_AGENT_HOSTS` | Nom du LXC dans NetBox ; liste des hôtes Docker attendus (alerte Zabbix si l'un se tait) |
+| `MCP_DEFAULT_PREFIX`, `MCP_RESERVED_IP_RANGES` | Préfixe par défaut et plages jamais proposées (DHCP) pour les IPs libres |
 | `DIODE_CLIENT_SECRET_*` | Un client OAuth2 Diode par usage (`orb-agent`, `nginx-agent`, et les deux clients internes) |
 
 ## Mise à jour
@@ -90,7 +107,7 @@ Toutes les variables sont listées et commentées dans [deploy/stack.env.example
 
 ## Ajouter un plugin
 
-- **Plugin PyPI** : ajouter la ligne `paquet==version` dans `image/netbox/plugin_requirements.txt`, ajouter son nom dans `PLUGINS` et sa configuration dans `PLUGINS_CONFIG` de `image/netbox/config/plugins.py` (valeurs sensibles lues dans l'environnement), puis pousser. Mettre à jour `expected = 10` dans le workflow.
+- **Plugin PyPI** : ajouter la ligne `paquet==version` dans `image/netbox/plugin_requirements.txt`, ajouter son nom dans `PLUGINS` et sa configuration dans `PLUGINS_CONFIG` de `image/netbox/config/plugins.py` (valeurs sensibles lues dans l'environnement), puis pousser. Mettre à jour `expected = 14` dans le workflow.
 - **Plugin maison** : créer `plugins/<nom>/` (paquet Python avec `pyproject.toml`, README, licence MIT, tests dans `<module>/tests/`), l'ajouter à la commande `uv pip install` du `Dockerfile`, à `PLUGINS`, et à la commande `manage.py test` du workflow.
 
 ## Changer un secret

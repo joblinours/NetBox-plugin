@@ -40,7 +40,19 @@ PLUGINS = [
     "netbox_routing",
     "netbox_cloudflare_tunnel",
     "netbox_cmdb",
+    "netbox_adguard",
+    "netbox_docker_inventory",
+    "netbox_cmdb_export",
+    "netbox_cmdb_mcp",
 ]
+
+_ADGUARD_URLS = _env_list("ADGUARD_URLS")
+_DOCKER_AGENT_HOSTS = _env_list("DOCKER_AGENT_HOSTS")
+_EXPECTED_SOURCES = _env_list("CMDB_EXPECTED_SOURCES") or (
+    ["proxmox", "cloudflare", "network-scan", "nginx"]
+    + (["adguard"] if _ADGUARD_URLS else [])
+    + [f"docker-{h.lower().replace('.', '-')}" for h in _DOCKER_AGENT_HOSTS]
+)
 
 PLUGINS_CONFIG = {
     "netbox_diode_plugin": {
@@ -72,6 +84,26 @@ PLUGINS_CONFIG = {
     "netbox_cmdb": {
         "proxmox_sync_interval": _env_int("PROXMOX_SYNC_INTERVAL", 1440),
         "max_age_hours": _env_int("SOURCE_MAX_AGE_HOURS", 26),
-        "expected_sources": _env_list("CMDB_EXPECTED_SOURCES") or ["proxmox", "cloudflare", "network-scan", "nginx"],
+        "expected_sources": _EXPECTED_SOURCES,
+    },
+    "netbox_adguard": {
+        "instances": _ADGUARD_URLS,
+        "username": _env("ADGUARD_USERNAME"),
+        "password": _env("ADGUARD_PASSWORD"),
+        "verify_ssl": _env_bool("ADGUARD_VERIFY_SSL", True),
+        "sync_interval": _env_int("ADGUARD_SYNC_INTERVAL", 1440) if _ADGUARD_URLS else 0,
+        "sync_netbox_dns": _env_bool("ADGUARD_SYNC_NETBOX_DNS", True),
+        "auto_create_zones": _env_bool("ADGUARD_AUTO_CREATE_ZONES", True),
+        "nameserver": _env("ADGUARD_DNS_NAMESERVER", "adguard.home.arpa"),
+    },
+    "netbox_docker_inventory": {
+        "create_services": _env_bool("DOCKER_CREATE_SERVICES", True),
+    },
+    "netbox_cmdb_export": {
+        "title": _env("CMDB_EXPORT_TITLE", "CMDB homelab"),
+    },
+    "netbox_cmdb_mcp": {
+        "default_prefix": _env("MCP_DEFAULT_PREFIX", "192.168.1.0/24"),
+        "reserved_ip_ranges": _env_list("MCP_RESERVED_IP_RANGES"),
     },
 }

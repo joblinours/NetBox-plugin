@@ -57,14 +57,72 @@ CUSTOM_FIELDS = [
         ["virtualization.virtualmachine", "dcim.device"],
         {"description": "Where backups are stored, e.g. DAS"},
     ),
+    (
+        "local_domains",
+        "Domaines locaux",
+        "text",
+        ["virtualization.virtualmachine", "dcim.device", "ipam.ipaddress"],
+        {"description": "Local DNS names (AdGuard rewrites) pointing here"},
+    ),
 ]
 
-# username, env var holding the token, permissions as (object type, actions)
-SERVICE_ACCOUNTS = [
-    ("svc-orb-agent", "CMDB_TOKEN_ORB_AGENT", [("netbox_cmdb.sourcestatus", ["view", "change"])]),
-    ("svc-nginx-agent", "CMDB_TOKEN_NGINX_AGENT", [("netbox_cmdb.sourcestatus", ["view", "change"])]),
-    ("svc-zabbix", "CMDB_TOKEN_ZABBIX", [("netbox_cmdb.sourcestatus", ["view"])]),
+# Object types the read-only MCP account may view (missing ones are skipped).
+MCP_VIEW_TYPES = [
+    "dcim.device",
+    "dcim.site",
+    "dcim.interface",
+    "dcim.devicerole",
+    "dcim.platform",
+    "virtualization.virtualmachine",
+    "virtualization.vminterface",
+    "virtualization.cluster",
+    "virtualization.clustertype",
+    "virtualization.virtualdisk",
+    "ipam.ipaddress",
+    "ipam.prefix",
+    "ipam.iprange",
+    "ipam.service",
+    "ipam.vlan",
+    "ipam.vrf",
+    "extras.tag",
+    "netbox_cmdb.sourcestatus",
+    "netbox_cloudflare_tunnel.tunnel",
+    "netbox_cloudflare_tunnel.publichostname",
+    "netbox_adguard.dnsrewrite",
+    "netbox_docker_inventory.dockerhost",
+    "netbox_docker_inventory.dockercontainer",
+    "netbox_docker_inventory.dockernetwork",
+    "netbox_dns.zone",
+    "netbox_dns.record",
 ]
+
+# username, env var holding the token, permissions as (permission name, object types, actions)
+SERVICE_ACCOUNTS = [
+    ("svc-orb-agent", "CMDB_TOKEN_ORB_AGENT", [("sources", ["netbox_cmdb.sourcestatus"], ["view", "change"])]),
+    ("svc-nginx-agent", "CMDB_TOKEN_NGINX_AGENT", [("sources", ["netbox_cmdb.sourcestatus"], ["view", "change"])]),
+    ("svc-zabbix", "CMDB_TOKEN_ZABBIX", [("sources", ["netbox_cmdb.sourcestatus"], ["view"])]),
+    (
+        "svc-docker-agent",
+        "CMDB_TOKEN_DOCKER_AGENT",
+        [
+            ("sources", ["netbox_cmdb.sourcestatus"], ["view", "change"]),
+            ("docker", ["netbox_docker_inventory.dockerhost"], ["view", "add", "change"]),
+        ],
+    ),
+    ("svc-mcp", "CMDB_TOKEN_MCP", [("read", MCP_VIEW_TYPES, ["view"])]),
+]
+
+
+def _object_types(names):
+    from core.models import ObjectType
+
+    out = []
+    for name in names:
+        try:
+            out.append(ObjectType.objects.get_by_natural_key(*name.split(".")))
+        except ObjectType.DoesNotExist:
+            continue  # plugin not installed
+    return out
 
 
 def _env(name, default=""):
@@ -121,7 +179,6 @@ def ensure_custom_fields(stdout=None):
 
 
 def ensure_service_accounts(stdout=None):
-    from core.models import ObjectType
     from users.choices import TokenVersionChoices
     from users.models import ObjectPermission, Token, User
 
@@ -144,15 +201,18 @@ def ensure_service_accounts(stdout=None):
             user.set_unusable_password()
             user.save()
 
-        for object_type, actions in permissions:
-            perm_name = f"cmdb:{username}:{object_type}"
+        for label, object_types, actions in permissions:
+            types = _object_types(object_types)
+            if not types:
+                continue
+            perm_name = f"cmdb:{username}:{label}"
             perm, _ = ObjectPermission.objects.get_or_create(
                 name=perm_name, defaults={"actions": actions, "description": MANAGED}
             )
             if sorted(perm.actions) != sorted(actions):
                 perm.actions = actions
                 perm.save()
-            perm.object_types.set([ObjectType.objects.get_by_natural_key(*object_type.split("."))])
+            perm.object_types.set(types)
             perm.users.add(user)
 
         token = Token.objects.filter(user=user, key=key).first()

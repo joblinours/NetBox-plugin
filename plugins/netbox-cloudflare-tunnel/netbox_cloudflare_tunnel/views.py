@@ -27,7 +27,7 @@ class TunnelView(generic.ObjectView):
     actions = (DeleteObject,)
 
     def get_extra_context(self, request, instance):
-        table = tables.PublicHostnameTable(instance.hostnames.all(), user=request.user)
+        table = tables.PublicHostnameTable(instance.hostnames.all())
         table.configure(request)
         return {"hostnames_table": table}
 

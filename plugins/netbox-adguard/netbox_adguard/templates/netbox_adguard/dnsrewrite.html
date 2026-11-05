@@ -1,0 +1,22 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+{% block content %}
+<div class="row mb-3">
+  <div class="col col-md-6">
+    <div class="card">
+      <h2 class="card-header">DNS rewrite</h2>
+      <table class="table table-hover attr-table">
+        <tr><th scope="row">Domain</th><td><code>{{ object.domain }}</code></td></tr>
+        <tr><th scope="row">Answer</th><td><code>{{ object.answer }}</code> ({{ object.get_answer_type_display }})</td></tr>
+        <tr><th scope="row">Enabled</th><td>{% checkmark object.enabled %}</td></tr>
+        <tr><th scope="row">IP address</th><td>{{ object.ip_address|linkify|placeholder }}</td></tr>
+        <tr><th scope="row">Host</th><td>{% if object.virtual_machine %}{{ object.virtual_machine|linkify }}{% else %}{{ object.device|linkify|placeholder }}{% endif %}</td></tr>
+        <tr><th scope="row">DNS record</th><td>{{ object.dns_record|linkify|placeholder }}</td></tr>
+        <tr><th scope="row">Resolution</th><td>{{ object.resolution|placeholder }}</td></tr>
+        <tr><th scope="row">AdGuard instance</th><td>{{ object.instance }}</td></tr>
+      </table>
+    </div>
+    {% include 'inc/panels/tags.html' %}
+  </div>
+</div>
+{% endblock %}

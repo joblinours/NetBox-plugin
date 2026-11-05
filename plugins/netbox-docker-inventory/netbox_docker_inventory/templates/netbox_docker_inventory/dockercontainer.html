@@ -1,0 +1,44 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+{% block content %}
+<div class="row mb-3">
+  <div class="col col-md-6">
+    <div class="card">
+      <h2 class="card-header">Container</h2>
+      <table class="table table-hover attr-table">
+        <tr><th scope="row">Name</th><td>{{ object.name }}</td></tr>
+        <tr><th scope="row">Host</th><td>{{ object.host|linkify }}</td></tr>
+        <tr><th scope="row">Stack / service</th><td>{{ object.stack|placeholder }} / {{ object.compose_service|placeholder }}</td></tr>
+        <tr><th scope="row">Image</th><td><code>{{ object.image }}</code></td></tr>
+        <tr><th scope="row">State</th><td>{% badge object.state bg_color=object.get_state_color %} {{ object.status }}{% if object.health %} ({{ object.health }}){% endif %}</td></tr>
+        <tr><th scope="row">Restart policy</th><td>{{ object.restart_policy|placeholder }}</td></tr>
+        <tr><th scope="row">Network mode</th><td>{{ object.network_mode|placeholder }}</td></tr>
+        <tr><th scope="row">Ports</th><td>{{ object.ports_display|placeholder }}</td></tr>
+        <tr><th scope="row">NetBox service</th><td>{{ object.service|linkify|placeholder }}</td></tr>
+        <tr><th scope="row">Created</th><td>{{ object.created_at|isodatetime|placeholder }}</td></tr>
+      </table>
+    </div>
+    {% include 'inc/panels/tags.html' %}
+  </div>
+  <div class="col col-md-6">
+    <div class="card">
+      <h2 class="card-header">Networks</h2>
+      <table class="table table-hover">
+        <thead><tr><th>Network</th><th>IP</th><th>Aliases</th></tr></thead>
+        {% for n in object.network_attachments %}
+          <tr><td>{{ n.network }}</td><td>{{ n.ip|placeholder }}</td><td>{{ n.aliases|join:", "|placeholder }}</td></tr>
+        {% empty %}<tr><td colspan="3" class="text-muted">None</td></tr>{% endfor %}
+      </table>
+    </div>
+    <div class="card">
+      <h2 class="card-header">Mounts</h2>
+      <table class="table table-hover">
+        <thead><tr><th>Type</th><th>Source</th><th>Destination</th><th>RW</th></tr></thead>
+        {% for m in object.mounts %}
+          <tr><td>{{ m.type }}</td><td><code>{{ m.source }}</code></td><td><code>{{ m.destination }}</code></td><td>{% checkmark m.rw %}</td></tr>
+        {% empty %}<tr><td colspan="4" class="text-muted">None</td></tr>{% endfor %}
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
