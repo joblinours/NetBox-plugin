@@ -22,6 +22,8 @@ class Settings:
     parent_name: str
     parent_type: str = "vm"  # vm | device
     cluster: str = ""
+    cluster_type: str = ""
+    cluster_site: str = ""
     site: str = ""
     tag: str = "nginx-agent"
     nginx_bin: str = "nginx"
@@ -42,6 +44,8 @@ class Settings:
             parent_name=get("NGINX_AGENT_HOST_NAME") or os.uname().nodename,
             parent_type=get("NGINX_AGENT_HOST_TYPE", "vm").lower(),
             cluster=get("NGINX_AGENT_CLUSTER"),
+            cluster_type=get("NGINX_AGENT_CLUSTER_TYPE"),
+            cluster_site=get("NGINX_AGENT_CLUSTER_SITE"),
             site=get("NGINX_AGENT_SITE"),
             tag=get("NGINX_AGENT_TAG", "nginx-agent"),
             nginx_bin=get("NGINX_BIN", "nginx"),
@@ -50,6 +54,47 @@ class Settings:
             netbox_token=get("NETBOX_TOKEN"),
             source_name=get("CMDB_SOURCE_NAME", "nginx"),
         )
+
+
+def _netbox_get(settings: Settings, path):
+    req = urllib.request.Request(
+        f"{settings.netbox_url}{path}",
+        headers={"Authorization": f"Bearer {settings.netbox_token}", "Accept": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.load(resp)
+
+
+def resolve_parent(settings: Settings, log=print):
+    """Fill the cluster name / type / site of this VM from NetBox.
+
+    Diode only recognises an existing cluster when it gets its name, its type and
+    its site; with less, it creates a second cluster and a second VM. Values set
+    explicitly (NGINX_AGENT_CLUSTER*) win over what NetBox says.
+    """
+    if settings.parent_type != "vm" or not settings.netbox_url or not settings.netbox_token:
+        return settings
+    from urllib.parse import quote
+
+    try:
+        vms = _netbox_get(settings, f"/api/virtualization/virtual-machines/?name={quote(settings.parent_name)}")
+        results = vms.get("results") or []
+        if not results:
+            log(f"WARN: VM {settings.parent_name!r} not found in NetBox (check NGINX_AGENT_HOST_NAME)")
+            return settings
+        cluster_ref = results[0].get("cluster")
+        if not cluster_ref:
+            return settings
+        cluster = _netbox_get(settings, f"/api/virtualization/clusters/{cluster_ref['id']}/")
+    except (OSError, ValueError, KeyError) as exc:
+        log(f"WARN: could not read the VM's cluster from NetBox ({exc}); using NGINX_AGENT_CLUSTER* only")
+        return settings
+    settings.cluster = settings.cluster or cluster.get("name", "")
+    settings.cluster_type = settings.cluster_type or (cluster.get("type") or {}).get("name", "")
+    scope = cluster.get("scope") or {}
+    if not settings.cluster_site and cluster.get("scope_type") == "dcim.site":
+        settings.cluster_site = scope.get("name", "")
+    return settings
 
 
 def read_nginx_config(settings: Settings) -> str:
@@ -66,6 +111,7 @@ def read_nginx_config(settings: Settings) -> str:
 def build_entities(vhosts: list[VirtualHost], settings: Settings):
     from netboxlabs.diode.sdk.ingester import (
         Cluster,
+        ClusterType,
         CustomFieldValue,
         Device,
         Entity,
@@ -83,7 +129,12 @@ def build_entities(vhosts: list[VirtualHost], settings: Settings):
     else:
         vm_kwargs = {"name": settings.parent_name}
         if settings.cluster:
-            vm_kwargs["cluster"] = Cluster(name=settings.cluster)
+            cluster_kwargs = {"name": settings.cluster}
+            if settings.cluster_type:
+                cluster_kwargs["type"] = ClusterType(name=settings.cluster_type)
+            if settings.cluster_site:
+                cluster_kwargs["scope_site"] = Site(name=settings.cluster_site)
+            vm_kwargs["cluster"] = Cluster(**cluster_kwargs)
         parent = {"parent_object_virtual_machine": VirtualMachine(**vm_kwargs)}
 
     entities = []
@@ -165,6 +216,14 @@ def report(settings: Settings, ok: bool, message: str, details: dict | None = No
 
 def run(settings: Settings, dry_run=False, log=print):
     vhosts = vhosts_from_dump(read_nginx_config(settings))
+    resolve_parent(settings, log)
+    if settings.parent_type == "vm":
+        log(
+            f"  parent VM: {settings.parent_name} (cluster {settings.cluster or '-'}, "
+            f"type {settings.cluster_type or '-'}, site {settings.cluster_site or '-'})"
+        )
+        if settings.cluster and not settings.cluster_type:
+            log("WARN: cluster type unknown: Diode may create a duplicate cluster/VM (set NGINX_AGENT_CLUSTER_TYPE)")
     for vh in vhosts:
         log(f"  {vh.name:40s} ports={sorted(vh.ports)} upstream={vh.upstream or '-'}")
     entities = build_entities(vhosts, settings)

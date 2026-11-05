@@ -99,7 +99,19 @@ MCP_VIEW_TYPES = [
 # username, env var holding the token, permissions as (permission name, object types, actions)
 SERVICE_ACCOUNTS = [
     ("svc-orb-agent", "CMDB_TOKEN_ORB_AGENT", [("sources", ["netbox_cmdb.sourcestatus"], ["view", "change"])]),
-    ("svc-nginx-agent", "CMDB_TOKEN_NGINX_AGENT", [("sources", ["netbox_cmdb.sourcestatus"], ["view", "change"])]),
+    (
+        "svc-nginx-agent",
+        "CMDB_TOKEN_NGINX_AGENT",
+        [
+            ("sources", ["netbox_cmdb.sourcestatus"], ["view", "change"]),
+            # to describe its own VM to Diode exactly as NetBox knows it (cluster, type, site)
+            (
+                "inventory",
+                ["virtualization.virtualmachine", "virtualization.cluster", "virtualization.clustertype", "dcim.site"],
+                ["view"],
+            ),
+        ],
+    ),
     ("svc-zabbix", "CMDB_TOKEN_ZABBIX", [("sources", ["netbox_cmdb.sourcestatus"], ["view"])]),
     (
         "svc-docker-agent",

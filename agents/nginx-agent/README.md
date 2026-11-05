@@ -26,7 +26,7 @@ sudoedit /etc/cmdb-nginx-agent.env   # modèle : cmdb-nginx-agent.env.example
 | `DIODE_TARGET` | `grpc://192.168.1.13:10001/diode` |
 | `DIODE_CLIENT_ID` / `DIODE_CLIENT_SECRET` | `nginx-agent` / `DIODE_CLIENT_SECRET_NGINX_AGENT` |
 | `NGINX_AGENT_HOST_NAME` | nom de la VM dans NetBox (ex. `revers-proxy`) |
-| `NGINX_AGENT_CLUSTER` | nom du cluster Proxmox dans NetBox (évite de créer une VM en double) |
+| `NGINX_AGENT_CLUSTER` | optionnel : nom du cluster Proxmox dans NetBox. L'agent lit lui-même le cluster, son type et son site dans NetBox (via `NETBOX_TOKEN`) : Diode n'identifie la VM existante qu'avec ces trois valeurs, sinon il crée un cluster et une VM en double. `NGINX_AGENT_CLUSTER_TYPE` / `NGINX_AGENT_CLUSTER_SITE` pour les forcer |
 | `NGINX_AGENT_HOST_TYPE` | `vm` (défaut) ou `device` |
 | `NETBOX_URL` / `NETBOX_TOKEN` | `http://192.168.1.13:10000` / `CMDB_TOKEN_NGINX_AGENT` (statut pour Zabbix) |
 
