@@ -276,3 +276,13 @@ def run(stdout=None):
         ensure_service_accounts(stdout)
     with transaction.atomic():
         ensure_proxmox_endpoint(stdout)
+    if _env_bool("CMDB_SYNC_ON_START", True):
+        from .syncs import enqueue_all
+
+        try:
+            queued = enqueue_all()
+        except Exception as exc:  # never block NetBox start-up
+            logger.warning("Could not queue the start-up syncs: %s", exc)
+            queued = []
+        if stdout:
+            stdout.write(f"  syncs queued: {', '.join(queued) or 'none'}")

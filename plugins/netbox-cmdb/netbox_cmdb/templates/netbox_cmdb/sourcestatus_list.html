@@ -1,5 +1,14 @@
 {% extends 'generic/_base.html' %}
+{% load helpers %}
 {% block title %}CMDB — source health{% endblock %}
+{% block controls %}
+  {% if perms.netbox_cmdb.change_sourcestatus %}
+    <form action="{% url 'plugins:netbox_cmdb:run_syncs' %}" method="post" class="d-inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary"><i class="mdi mdi-sync"></i> Run all syncs now</button>
+    </form>
+  {% endif %}
+{% endblock %}
 {% block content %}
 <div class="row mb-3">
   <div class="col">
@@ -9,7 +18,7 @@
         {% else %}<span class="badge text-bg-danger">{{ health.status }}</span>{% endif %}
       </h2>
       <table class="table table-hover attr-table">
-        <thead><tr><th>Source</th><th>Status</th><th>Last run</th><th>Last success</th><th>Age (h)</th><th>Message</th></tr></thead>
+        <thead><tr><th>Source</th><th>Status</th><th>Last run</th><th>Last success</th><th>Age (h)</th><th>Message</th><th></th></tr></thead>
         <tbody>
         {% for name, s in health.sources.items %}
           <tr>
@@ -19,11 +28,24 @@
             <td>{{ s.last_success|default:"—" }}</td>
             <td>{{ s.age_hours|default:"—" }}</td>
             <td><small>{{ s.message }}</small></td>
+            <td class="text-end">
+              {% with pk=ids|get_key:name %}
+                {% if pk and perms.netbox_cmdb.delete_sourcestatus %}
+                  <form action="{% url 'plugins:netbox_cmdb:forget_source' pk %}" method="post" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Forget this source (it reappears if it reports again)"><i class="mdi mdi-delete"></i></button>
+                  </form>
+                {% endif %}
+              {% endwith %}
+            </td>
           </tr>
         {% endfor %}
         </tbody>
       </table>
-      <div class="card-footer text-muted">Stale after {{ health.max_age_hours }} h. JSON: <code>/api/plugins/cmdb/health/</code></div>
+      <div class="card-footer text-muted">
+        Stale after {{ health.max_age_hours }} h. Proxmox, Cloudflare and AdGuard also run at every NetBox start.
+        Expected sources come from the stack variables (DOCKER_AGENT_HOSTS, ADGUARD_URLS…). JSON: <code>/api/plugins/cmdb/health/</code>
+      </div>
     </div>
   </div>
 </div>

@@ -159,3 +159,27 @@ class ProxmoxEndpointTest(TestCase):
         with self.assertRaises(JobFailed):
             run_proxmox_sync()
         self.assertEqual(SourceStatus.objects.get(name="proxmox").status, "failed")
+
+
+class SyncsTest(TestCase):
+    def test_enqueue_all_and_views(self):
+        from core.models import Job
+        from proxmox2netbox.models import ProxmoxEndpoint
+
+        from netbox_cmdb.syncs import enqueue_all
+
+        self.assertEqual(enqueue_all(), [])  # nothing configured
+        ProxmoxEndpoint(name="pve", domain="pve.lan", token_name="t", token_value="v").save()
+        with mock.patch("netbox_cmdb.syncs.get_plugin_config", return_value=""):
+            self.assertEqual(enqueue_all(), ["CMDB - Proxmox sync"])
+            self.assertEqual(enqueue_all(), [])  # already waiting: no duplicate
+        self.assertEqual(Job.objects.filter(name="CMDB - Proxmox sync", interval__isnull=True).count(), 1)
+
+        user = User.objects.create_superuser("admin", "a@b.c", "pw")
+        self.client.force_login(user)
+        self.assertEqual(self.client.get(reverse("plugins:netbox_cmdb:sourcestatus_list")).status_code, 200)
+        self.assertEqual(self.client.post(reverse("plugins:netbox_cmdb:run_syncs")).status_code, 302)
+        old = SourceStatus.report("docker-docker", True, "ok")
+        resp = self.client.post(reverse("plugins:netbox_cmdb:forget_source", args=[old.pk]))
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(SourceStatus.objects.filter(name="docker-docker").exists())
