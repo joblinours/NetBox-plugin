@@ -28,6 +28,7 @@ def test_vhosts():
         "wiki.example.com",
         "local.example.com",
         "stream-2222",
+        "proxy.example.com",
     }
 
     cloud = vhosts["cloud.example.com"]
@@ -65,3 +66,64 @@ def test_entities():
     assert cloud.custom_fields["upstream_target"].text == "http://192.168.1.21:11000"
     assert [t.name for t in cloud.tags] == ["nginx-agent"]
     assert "/push/ -> http://192.168.1.21:7867" in cloud.comments
+
+
+def test_path_routing_vhost():
+    vhosts = {v.name: v for v in vhosts_from_dump(SAMPLE)}
+    proxy = vhosts["proxy.example.com"]
+    assert "/" not in proxy.locations  # "location = /" only redirects
+    assert proxy.locations["/bastion/"] == "http://192.168.1.5:8080"
+    assert proxy.locations["/slides/"] == "http://192.168.1.13:8084"
+    assert vhosts["git.example.com"].locations["~ ^/api/(.*)$"] == "https://192.168.1.25:3000"
+
+    settings = Settings(
+        diode_target="grpc://x/diode", client_id="c", client_secret="s", parent_name="revers-proxy", cluster="homelab"
+    )
+    services = {e.service.name: e.service for e in build_entities(vhosts_from_dump(SAMPLE), settings)}
+    assert services["proxy.example.com"].custom_fields["upstream_target"].text == ""
+    assert services["proxy.example.com/bastion"].custom_fields["upstream_target"].text == "http://192.168.1.5:8080"
+    assert services["proxy.example.com/iptv-dev"].custom_fields["upstream_target"].text == "http://192.168.1.13:8081"
+    assert list(services["proxy.example.com/slides"].port_mappings) == ["tcp/80"]
+    assert services["cloud.example.com/push"].custom_fields["upstream_target"].text == "http://192.168.1.21:7867"
+    # regex locations are not split into services
+    assert not any(name.startswith("git.example.com/") for name in services)
+
+
+def test_resolve_parent_from_netbox(monkeypatch):
+    from cmdb_nginx_agent import agent
+
+    answers = {
+        "/api/virtualization/virtual-machines/?name=revers-proxy": {"results": [{"cluster": {"id": 3}}]},
+        "/api/virtualization/clusters/3/": {
+            "name": "homelab",
+            "type": {"name": "Proxmox Cluster"},
+            "scope_type": "dcim.site",
+            "scope": {"name": "Proxmox2NetBox"},
+        },
+    }
+    monkeypatch.setattr(agent, "_netbox_get", lambda settings, path: answers[path])
+    s = Settings(
+        diode_target="x",
+        client_id="c",
+        client_secret="s",
+        parent_name="revers-proxy",
+        netbox_url="http://nb",
+        netbox_token="t",
+    )
+    agent.resolve_parent(s, log=lambda *_: None)
+    assert (s.cluster, s.cluster_type, s.cluster_site) == ("homelab", "Proxmox Cluster", "Proxmox2NetBox")
+    vm = build_entities(vhosts_from_dump(SAMPLE), s)[0].service.parent_object_virtual_machine
+    assert vm.cluster.type.name == "Proxmox Cluster" and vm.cluster.scope_site.name == "Proxmox2NetBox"
+
+    # explicit values win
+    s2 = Settings(
+        diode_target="x",
+        client_id="c",
+        client_secret="s",
+        parent_name="revers-proxy",
+        netbox_url="http://nb",
+        netbox_token="t",
+        cluster_type="Custom",
+    )
+    agent.resolve_parent(s2, log=lambda *_: None)
+    assert s2.cluster_type == "Custom"

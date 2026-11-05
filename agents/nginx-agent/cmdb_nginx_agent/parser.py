@@ -175,7 +175,11 @@ def extract_vhosts(directives):
         for loc, _ in _walk(d.block):
             if loc.name != "location" or loc.block is None:
                 continue
-            path = loc.args[-1] if loc.args else "/"
+            if not loc.args:
+                continue
+            modifier = loc.args[0] if len(loc.args) > 1 else ""
+            # "= /x" and "^~ /x" are plain paths; "~ regex" / "~* regex" are kept marked as regex
+            path = f"~ {loc.args[-1]}" if modifier in ("~", "~*") else loc.args[-1]
             for p in loc.children("proxy_pass") + loc.children("grpc_pass"):
                 if p.args:
                     locations[path] = _normalize_target(

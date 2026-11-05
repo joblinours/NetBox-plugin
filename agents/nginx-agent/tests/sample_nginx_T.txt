@@ -52,3 +52,19 @@ server {
     server_name local.example.com;
     location / { proxy_pass http://$backend; }
 }
+
+# configuration file /etc/nginx/sites-enabled/proxy.conf:
+server {
+    listen 80;
+    server_name proxy.example.com;
+    location /bastion/ {
+        proxy_http_version 1.1;
+        proxy_pass http://192.168.1.5:8080/guacamole/;
+    }
+    location /secudash/ { proxy_pass http://192.168.1.8:5000/; }
+    location /iptv/ { proxy_pass http://192.168.1.13:8080/; }
+    location /iptv-dev/ { proxy_pass http://192.168.1.13:8081/; }
+    # trailing slash strips /slides/
+    location /slides/ { proxy_pass http://192.168.1.13:8084/; }
+    location = / { return 302 /bastion/; }
+}

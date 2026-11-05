@@ -41,7 +41,22 @@ def run_proxmox_sync():
     if errors:
         SourceStatus.report("proxmox", False, "; ".join(map(str, errors)), summary)
         raise JobFailed("; ".join(map(str, errors)))
-    SourceStatus.report("proxmox", True, "Sync complete", summary)
+    message = "Sync complete"
+    # proxmox2netbox sets neither the VMs' node nor the nodes' IP: add them.
+    from .enrich import link_proxmox
+
+    linked = ips = 0
+    for endpoint in ProxmoxEndpoint.objects.filter(sync_enabled=True):
+        try:
+            extra = link_proxmox(endpoint)
+        except Exception as exc:  # enrichment must never fail the sync itself
+            logger.warning("Proxmox enrichment failed for %s: %s", endpoint, exc)
+            message += f"; node/IP linking failed: {exc}"[:300]
+            continue
+        linked += extra["vms_linked"]
+        ips += extra["node_ips"]
+    summary.update(vms_linked_to_node=linked, node_ips_assigned=ips)
+    SourceStatus.report("proxmox", True, message, summary)
     return result
 
 

@@ -41,6 +41,13 @@ def run_sync(log=logger):
         _report(False, repr(exc))
         raise
     summary = result.as_dict()
+    if result.tunnels == 0:
+        msg = (
+            "No tunnel visible with this token: check CLOUDFLARE_ACCOUNT_ID, the token's "
+            "'Cloudflare Tunnel: Read' permission on that account, and CLOUDFLARE_TUNNEL_IDS"
+        )
+        _report(False, msg, summary)
+        raise JobFailed(msg)
     _report(
         True, f"{result.hostnames} hostnames on {result.tunnels} tunnels, {len(result.unresolved)} unresolved", summary
     )

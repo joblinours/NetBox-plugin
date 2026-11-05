@@ -3,7 +3,7 @@
 # starts the status reporter in the background, then hands over to orb-agent.
 set -euo pipefail
 
-: "${DIODE_TARGET:=grpc://127.0.0.1:8081/diode}"
+: "${DIODE_TARGET:=grpc://127.0.0.1:10001/diode}"
 : "${DIODE_CLIENT_ID:=orb-agent}"
 : "${DIODE_CLIENT_SECRET:?DIODE_CLIENT_SECRET (orb-agent Diode client secret) is required}"
 : "${ORB_AGENT_NAME:=cmdb-orb-agent}"

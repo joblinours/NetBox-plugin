@@ -1,7 +1,7 @@
 """cmdb-docker-agent: push this Docker host's containers, stacks and networks to NetBox.
 
 Environment:
-  NETBOX_URL            http://192.168.1.13:8000
+  NETBOX_URL            http://192.168.1.13:10000
   NETBOX_TOKEN          token of svc-docker-agent (CMDB_TOKEN_DOCKER_AGENT)
   DOCKER_AGENT_HOST_NAME  name of this host in NetBox (VM / device), default: Docker engine hostname
   DOCKER_AGENT_ADDRESSES  optional, comma separated IPs of this host (helps matching the NetBox VM)

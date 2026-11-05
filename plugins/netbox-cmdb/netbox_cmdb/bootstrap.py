@@ -99,7 +99,19 @@ MCP_VIEW_TYPES = [
 # username, env var holding the token, permissions as (permission name, object types, actions)
 SERVICE_ACCOUNTS = [
     ("svc-orb-agent", "CMDB_TOKEN_ORB_AGENT", [("sources", ["netbox_cmdb.sourcestatus"], ["view", "change"])]),
-    ("svc-nginx-agent", "CMDB_TOKEN_NGINX_AGENT", [("sources", ["netbox_cmdb.sourcestatus"], ["view", "change"])]),
+    (
+        "svc-nginx-agent",
+        "CMDB_TOKEN_NGINX_AGENT",
+        [
+            ("sources", ["netbox_cmdb.sourcestatus"], ["view", "change"]),
+            # to describe its own VM to Diode exactly as NetBox knows it (cluster, type, site)
+            (
+                "inventory",
+                ["virtualization.virtualmachine", "virtualization.cluster", "virtualization.clustertype", "dcim.site"],
+                ["view"],
+            ),
+        ],
+    ),
     ("svc-zabbix", "CMDB_TOKEN_ZABBIX", [("sources", ["netbox_cmdb.sourcestatus"], ["view"])]),
     (
         "svc-docker-agent",
@@ -276,3 +288,13 @@ def run(stdout=None):
         ensure_service_accounts(stdout)
     with transaction.atomic():
         ensure_proxmox_endpoint(stdout)
+    if _env_bool("CMDB_SYNC_ON_START", True):
+        from .syncs import enqueue_all
+
+        try:
+            queued = enqueue_all()
+        except Exception as exc:  # never block NetBox start-up
+            logger.warning("Could not queue the start-up syncs: %s", exc)
+            queued = []
+        if stdout:
+            stdout.write(f"  syncs queued: {', '.join(queued) or 'none'}")

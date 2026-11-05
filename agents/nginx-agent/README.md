@@ -4,7 +4,7 @@ Agent de discovery Nginx pour la CMDB : lit la configuration effective de Nginx 
 
 *Nginx discovery agent: reads `nginx -T` on the reverse proxy and pushes one NetBox service per `server_name` (listen ports, `proxy_pass` upstream) through Diode. No SSH: the agent runs on the proxy and pushes.*
 
-Ce qui est envoyé, pour chaque vhost : un `ipam.Service` nommé comme le hostname, parent = la VM du reverse-proxy (telle qu'importée par Proxmox), `port_mappings`, tag `nginx-agent`, custom field `upstream_target`. Le plugin Cloudflare s'en sert ensuite pour suivre `cloudflared → Nginx → service final`.
+Ce qui est envoyé : pour chaque vhost, un service à son nom, plus **un service par `location` qui fait un `proxy_pass`** (`proxy.example.com/bastion` → `http://192.168.1.5:8080`), pour qu'un vhost qui route par chemin soit suivi route par route. Les `location` en regex restent en commentaire du vhost. Pour chacun : un `ipam.Service` nommé comme le hostname, parent = la VM du reverse-proxy (telle qu'importée par Proxmox), `port_mappings`, tag `nginx-agent`, custom field `upstream_target`. Le plugin Cloudflare s'en sert ensuite pour suivre `cloudflared → Nginx → service final`.
 
 ## Installation sur revers-proxy (Debian/Ubuntu)
 
@@ -23,12 +23,12 @@ sudoedit /etc/cmdb-nginx-agent.env   # modèle : cmdb-nginx-agent.env.example
 
 | Variable | Valeur |
 | --- | --- |
-| `DIODE_TARGET` | `grpc://192.168.1.13:8081/diode` |
+| `DIODE_TARGET` | `grpc://192.168.1.13:10001/diode` |
 | `DIODE_CLIENT_ID` / `DIODE_CLIENT_SECRET` | `nginx-agent` / `DIODE_CLIENT_SECRET_NGINX_AGENT` |
 | `NGINX_AGENT_HOST_NAME` | nom de la VM dans NetBox (ex. `revers-proxy`) |
-| `NGINX_AGENT_CLUSTER` | nom du cluster Proxmox dans NetBox (évite de créer une VM en double) |
+| `NGINX_AGENT_CLUSTER` | optionnel : nom du cluster Proxmox dans NetBox. L'agent lit lui-même le cluster, son type et son site dans NetBox (via `NETBOX_TOKEN`) : Diode n'identifie la VM existante qu'avec ces trois valeurs, sinon il crée un cluster et une VM en double. `NGINX_AGENT_CLUSTER_TYPE` / `NGINX_AGENT_CLUSTER_SITE` pour les forcer |
 | `NGINX_AGENT_HOST_TYPE` | `vm` (défaut) ou `device` |
-| `NETBOX_URL` / `NETBOX_TOKEN` | `http://192.168.1.13:8000` / `CMDB_TOKEN_NGINX_AGENT` (statut pour Zabbix) |
+| `NETBOX_URL` / `NETBOX_TOKEN` | `http://192.168.1.13:10000` / `CMDB_TOKEN_NGINX_AGENT` (statut pour Zabbix) |
 
 Test à blanc, puis activation du timer quotidien :
 

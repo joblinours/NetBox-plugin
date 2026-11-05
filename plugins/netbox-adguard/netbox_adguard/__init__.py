@@ -29,6 +29,8 @@ class AdGuardConfig(PluginConfig):
         # Name server used as SOA MNAME of the zones created by the plugin.
         "nameserver": "adguard.home.arpa",
         "record_tag": "adguard",
+        # Give a host without IPv4 the IP of a rewrite named after it (homeass.local -> HomeAss).
+        "assign_ips": True,
     }
 
     def ready(self):

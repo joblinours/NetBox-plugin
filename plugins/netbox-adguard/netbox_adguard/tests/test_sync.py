@@ -51,6 +51,11 @@ class ClientTest(SimpleTestCase):
         self.assertFalse(rw[1]["enabled"])
         self.assertEqual(session.auth, ("u", "p"))
 
+    def test_url_without_scheme(self):
+        self.assertEqual(AdGuardClient("192.168.1.3").base_url, "http://192.168.1.3")
+        self.assertEqual(AdGuardClient(" 192.168.1.3:3000/ ").base_url, "http://192.168.1.3:3000")
+        self.assertEqual(AdGuardClient("https://ag.lan/").base_url, "https://ag.lan")
+
     def test_auth_error(self):
         session = mock.Mock()
         session.get.return_value = mock.Mock(status_code=401)
@@ -131,3 +136,22 @@ class SyncTest(TestCase):
         sync([Fake("http://ag1", REWRITES)], SETTINGS)
         self.assertEqual(inventory.find_host(None, "photos.home.lan"), self.nas)
         self.assertEqual(inventory.check_ip(None, "192.168.1.250")["available"], False)  # rewrite answer
+
+
+class AssignIPTest(TestCase):
+    def test_host_without_ip_gets_rewrite_ip(self):
+        cluster = Cluster.objects.create(name="pve", type=ClusterType.objects.create(name="PVE", slug="pve"))
+        homeass = VirtualMachine.objects.create(name="HomeAss", cluster=cluster)
+        result = sync(
+            [Fake("http://ag1", [{"domain": "homeass.local", "answer": "192.168.1.6", "enabled": True}])],
+            {**SETTINGS, "sync_netbox_dns": False},
+        )
+        homeass.refresh_from_db()
+        self.assertEqual(str(homeass.primary_ip4.address.ip), "192.168.1.6")
+        self.assertEqual(len(result.ips_assigned), 1)
+        self.assertEqual(DNSRewrite.objects.get().virtual_machine, homeass)  # resolved in the same run
+        again = sync(
+            [Fake("http://ag1", [{"domain": "homeass.local", "answer": "192.168.1.6", "enabled": True}])],
+            {**SETTINGS, "sync_netbox_dns": False},
+        )
+        self.assertEqual(again.ips_assigned, [])

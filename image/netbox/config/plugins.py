@@ -95,6 +95,7 @@ PLUGINS_CONFIG = {
         "sync_netbox_dns": _env_bool("ADGUARD_SYNC_NETBOX_DNS", True),
         "auto_create_zones": _env_bool("ADGUARD_AUTO_CREATE_ZONES", True),
         "nameserver": _env("ADGUARD_DNS_NAMESERVER", "adguard.home.arpa"),
+        "assign_ips": _env_bool("ADGUARD_ASSIGN_IPS", True),
     },
     "netbox_docker_inventory": {
         "create_services": _env_bool("DOCKER_CREATE_SERVICES", True),

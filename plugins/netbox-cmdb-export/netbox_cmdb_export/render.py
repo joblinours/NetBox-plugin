@@ -27,6 +27,15 @@ def _table(headers, rows):
     return out
 
 
+def _targets(u):
+    """Human-readable destination(s) of a public URL, one per Nginx path."""
+    if u.get("routes"):
+        return "; ".join(f"{r['path']} -> {r['service']} on {r['host']}" for r in u["routes"])
+    if u.get("service"):
+        return f"{u['service']} on {u['host']}" if u.get("host") else u["service"]
+    return u.get("upstream") or u.get("origin")
+
+
 def to_markdown(data):
     md = [f"# {data['title']}", "", f"Generated {data['generated']} from NetBox.", ""]
     counts = data["overview"]["counts"]
@@ -96,11 +105,8 @@ def to_markdown(data):
     if data["public_urls"]:
         md += ["## Public URLs", ""]
         md += _table(
-            ["URL", "Exposure", "Nginx vhost", "Upstream", "Service", "Host"],
-            [
-                [u["url"], u["exposure_path"], u["nginx_vhost"], u["upstream"], u["service"], u["host"]]
-                for u in data["public_urls"]
-            ],
+            ["URL", "Exposure", "Nginx", "Target (path -> service on host)"],
+            [[u["url"], u["exposure_path"], u.get("nginx_host"), _targets(u)] for u in data["public_urls"]],
         ) + [""]
     if data["dns_names"]:
         md += ["## DNS names", ""]
@@ -211,11 +217,8 @@ def to_pdf(data):
     if data["public_urls"]:
         heading("Public URLs", 13)
         table(
-            ["URL", "Exposure", "Nginx vhost", "Upstream", "Service", "Host"],
-            [
-                [u["url"], u["exposure_path"], u["nginx_vhost"], u["upstream"], u["service"], u["host"]]
-                for u in data["public_urls"]
-            ],
+            ["URL", "Exposure", "Nginx", "Target (path -> service on host)"],
+            [[u["url"], u["exposure_path"], u.get("nginx_host"), _targets(u)] for u in data["public_urls"]],
         )
     if data["dns_names"]:
         heading("DNS names", 13)
@@ -288,21 +291,16 @@ def build_graph(data, containers=False):
 
     for u in data["public_urls"]:
         uid = node(_id("url", u["url"]), u["url"].split("://", 1)[-1], "url", "Public URLs")
-        if u["exposure_path"] == "nginx" and u["nginx_vhost"]:
-            proxy_host = next(
-                (
-                    h["name"]
-                    for h in data["hosts"]
-                    for s in h["services"]
-                    if s["name"] == u["nginx_vhost"] and s.get("upstream_target")
-                ),
-                None,
+        proxy_host = u.get("nginx_host")
+        if u["exposure_path"] == "nginx" and proxy_host in host_ids:
+            edges.append((uid, host_ids[proxy_host], "via Nginx"))
+            routes = u.get("routes") or (
+                [{"path": "/", "host": u["host"]}] if u["host"] and u["host"] != proxy_host else []
             )
-            if proxy_host in host_ids:
-                edges.append((uid, host_ids[proxy_host], "via Nginx"))
-                if u["host"] in host_ids and u["host"] != proxy_host:
-                    edges.append((host_ids[proxy_host], host_ids[u["host"]], u["upstream"] or ""))
-                continue
+            for r in routes:
+                if r["host"] in host_ids:
+                    edges.append((host_ids[proxy_host], host_ids[r["host"]], r["path"]))
+            continue
         if u["host"] in host_ids:
             edges.append((uid, host_ids[u["host"]], "cloudflared"))
 

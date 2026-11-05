@@ -27,7 +27,7 @@ PLUGINS_CONFIG = {
     "netbox_cloudflare_tunnel": {
         "api_token": "...",          # Account > Cloudflare Tunnel > Read
         "account_id": "...",
-        "tunnel_ids": [],            # optional filter
+        "tunnel_ids": [],            # optional filter: tunnel IDs or names
         "nginx_hosts": ["192.168.1.30"],
         "create_services": True,
         "sync_interval": 1440,       # minutes, 0 = no schedule (system job)
