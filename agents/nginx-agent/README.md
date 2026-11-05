@@ -4,7 +4,7 @@ Agent de discovery Nginx pour la CMDB : lit la configuration effective de Nginx 
 
 *Nginx discovery agent: reads `nginx -T` on the reverse proxy and pushes one NetBox service per `server_name` (listen ports, `proxy_pass` upstream) through Diode. No SSH: the agent runs on the proxy and pushes.*
 
-Ce qui est envoyé, pour chaque vhost : un `ipam.Service` nommé comme le hostname, parent = la VM du reverse-proxy (telle qu'importée par Proxmox), `port_mappings`, tag `nginx-agent`, custom field `upstream_target`. Le plugin Cloudflare s'en sert ensuite pour suivre `cloudflared → Nginx → service final`.
+Ce qui est envoyé : pour chaque vhost, un service à son nom, plus **un service par `location` qui fait un `proxy_pass`** (`proxy.example.com/bastion` → `http://192.168.1.5:8080`), pour qu'un vhost qui route par chemin soit suivi route par route. Les `location` en regex restent en commentaire du vhost. Pour chacun : un `ipam.Service` nommé comme le hostname, parent = la VM du reverse-proxy (telle qu'importée par Proxmox), `port_mappings`, tag `nginx-agent`, custom field `upstream_target`. Le plugin Cloudflare s'en sert ensuite pour suivre `cloudflared → Nginx → service final`.
 
 ## Installation sur revers-proxy (Debian/Ubuntu)
 

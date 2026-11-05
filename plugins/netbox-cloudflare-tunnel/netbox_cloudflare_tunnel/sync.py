@@ -127,12 +127,23 @@ def _host_matches(host, ip, nginx_hosts):
     return bool(ip and str(ip.address.ip) in candidates)
 
 
-def find_proxy_service(hostname):
-    """Nginx vhost service pushed by the Nginx agent: named after the hostname, with upstream_target set."""
+def find_proxy_services(hostname, proxy_host=None):
+    """Nginx services pushed by the Nginx agent for ``hostname``: the vhost itself
+    (named ``hostname``) and one per proxied path (named ``hostname/path``).
+
+    When the Nginx host is known, only its services are considered; otherwise only
+    services carrying an ``upstream_target`` (backends created by this sync never do).
+    """
+    from django.db.models import Q
     from ipam.models import Service
 
-    qs = Service.objects.filter(name__iexact=hostname).exclude(custom_field_data__upstream_target__isnull=True)
-    return qs.exclude(custom_field_data__upstream_target="").order_by("pk").first()
+    qs = Service.objects.filter(Q(name__iexact=hostname) | Q(name__istartswith=f"{hostname}/"))
+    if proxy_host is not None:
+        ct = ContentType.objects.get_for_model(proxy_host)
+        qs = qs.filter(parent_object_type=ct, parent_object_id=proxy_host.pk)
+    else:
+        qs = qs.exclude(custom_field_data__upstream_target__isnull=True).exclude(custom_field_data__upstream_target="")
+    return sorted(qs, key=lambda s: (len(s.name), s.name.lower()))
 
 
 def ensure_service(parent, port, ip, name, create):
@@ -194,25 +205,46 @@ def reconcile_rule(tunnel, rule, settings):
     create = settings.get("create_services", True)
     if _host_matches(host, ip, settings.get("nginx_hosts") or []):
         values["exposure"] = ExposureChoices.NGINX
-        proxy = find_proxy_service(hostname)
-        if proxy is None:
+        proxies = find_proxy_services(hostname, parent)
+        if not proxies:
             values["resolution"] = f"via Nginx ({how}); vhost not reported by the Nginx agent yet"
             return values
-        values["proxy_service"] = proxy
-        upstream = (proxy.custom_field_data or {}).get("upstream_target") or ""
-        values["upstream"] = upstream
-        _, up_host, up_port = parse_origin(upstream)
-        up_parent, up_ip, up_how = resolve_host(up_host)
-        backend, created = ensure_service(up_parent, up_port, up_ip, hostname, create)
-        values["service"] = backend
+        links, routes, created = [], [], 0
+        for proxy in proxies:
+            path = proxy.name[len(hostname) :] or "/"
+            url = hostname if path == "/" else f"{hostname}{path}"
+            links.append((proxy, url))
+            upstream = (proxy.custom_field_data or {}).get("upstream_target") or ""
+            if not upstream:
+                continue
+            _, up_host, up_port = parse_origin(upstream)
+            up_parent, up_ip, up_how = resolve_host(up_host)
+            backend, was_created = ensure_service(up_parent, up_port, up_ip, url, create)
+            created += int(was_created)
+            if backend is not None:
+                links.append((backend, url))
+            routes.append((path, upstream, backend, up_how))
+        root = next((p for p in proxies if p.name.lower() == hostname), proxies[0])
+        values["proxy_service"] = root
+        resolved = [r for r in routes if r[2] is not None]
+        values["service"] = next((r[2] for r in routes if r[0] == "/"), resolved[0][2] if resolved else None)
+        if len(routes) == 1 and routes[0][0] == "/":
+            values["upstream"] = routes[0][1]
+            values["resolution"] = (
+                f"via Nginx -> {routes[0][1]} ({routes[0][3]})" if resolved else f"via Nginx; upstream: {routes[0][3]}"
+            )[:255]
+        else:
+            values["upstream"] = "; ".join(f"{p} -> {u}" for p, u, _, _ in routes)[:512]
+            values["resolution"] = f"via Nginx: {len(routes)} routes, {len(resolved)} linked to a service"[:255]
         values["_created"] = created
-        values["resolution"] = f"via Nginx -> {upstream} ({up_how})" if backend else f"via Nginx; upstream: {up_how}"
+        values["_links"] = links
         return values
 
     values["exposure"] = ExposureChoices.DIRECT
     backend, created = ensure_service(parent, port, ip, hostname, create)
     values["service"] = backend
     values["_created"] = created
+    values["_links"] = [(backend, hostname)] if backend is not None else []
     values["resolution"] = how if backend else f"{how}; no service on port {port}"
     return values
 
@@ -269,8 +301,8 @@ def sync(client, settings, log=logger):
                 if not rule.get("hostname"):
                     continue  # catch-all rule
                 values = reconcile_rule(tunnel, rule, settings)
-                created_service = values.pop("_created", False)
-                result.services_created += int(bool(created_service))
+                result.services_created += int(values.pop("_created", 0))
+                links = values.pop("_links", [])
                 hostname = rule["hostname"].strip().lower()
                 path = (rule.get("path") or "").strip()
                 obj = PublicHostname.objects.filter(tunnel=tunnel, hostname=hostname, path=path).first()
@@ -290,10 +322,9 @@ def sync(client, settings, log=logger):
                 result.hostnames += 1
                 if not values.get("service") and not values.get("proxy_service"):
                     result.unresolved.append(f"{hostname}: {values.get('resolution')}")
-                for svc in (values.get("service"), values.get("proxy_service")):
-                    if svc is not None:
-                        entry = service_urls.setdefault(svc.pk, [svc, set(), values["exposure"]])
-                        entry[1].add(hostname)
+                for svc, url in links:
+                    entry = service_urls.setdefault(svc.pk, [svc, set(), values["exposure"]])
+                    entry[1].add(f"{url}{path}" if path else url)
 
         # Hostnames removed from Cloudflare, and tunnels deleted (or filtered out) disappear.
         stale = PublicHostname.objects.exclude(pk__in=seen_hostnames)

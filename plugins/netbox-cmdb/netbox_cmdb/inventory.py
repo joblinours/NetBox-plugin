@@ -341,8 +341,27 @@ def public_urls(user):
         return []
     from netbox_cloudflare_tunnel.models import PublicHostname
 
+    _, _, _, Service = _models()
     out = []
     for h in _restrict(PublicHostname.objects.select_related("tunnel", "service", "proxy_service"), user):
+        proxy_host = h.proxy_service.parent if h.proxy_service else None
+        routes = []
+        if h.exposure == "nginx" and proxy_host is not None:
+            # backends the Cloudflare sync linked to this hostname (one per Nginx path)
+            for svc in _restrict(Service.objects.filter(custom_field_data__public_url__icontains=h.hostname), user):
+                if svc.parent is None or svc.parent == proxy_host:
+                    continue
+                for label in str((svc.custom_field_data or {}).get("public_url") or "").split(", "):
+                    if label == h.hostname or label.startswith(f"{h.hostname}/"):
+                        routes.append(
+                            {
+                                "path": label[len(h.hostname) :] or "/",
+                                "service": svc.name,
+                                "host": svc.parent.name,
+                                "ports": svc.port_mappings,
+                            }
+                        )
+            routes.sort(key=lambda r: r["path"])
         out.append(
             {
                 "url": f"https://{h.hostname}{h.path}",
@@ -350,7 +369,9 @@ def public_urls(user):
                 "exposure_path": h.exposure,
                 "origin": h.origin,
                 "nginx_vhost": h.proxy_service.name if h.proxy_service else None,
+                "nginx_host": proxy_host.name if proxy_host else None,
                 "upstream": h.upstream or None,
+                "routes": routes,
                 "service": h.service.name if h.service else None,
                 "host": h.service.parent.name if h.service and h.service.parent else None,
             }

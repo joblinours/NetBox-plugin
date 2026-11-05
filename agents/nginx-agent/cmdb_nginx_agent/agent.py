@@ -87,22 +87,37 @@ def build_entities(vhosts: list[VirtualHost], settings: Settings):
         parent = {"parent_object_virtual_machine": VirtualMachine(**vm_kwargs)}
 
     entities = []
+    ports = None
+
+    def service(name, upstream, description, comments=None):
+        return Entity(
+            service=Service(
+                name=name[:100],
+                port_mappings=[f"tcp/{p}" for p in ports],
+                description=description[:200],
+                comments=comments,
+                tags=[settings.tag],
+                # always sent, so a route that lost its proxy_pass is cleared in NetBox
+                custom_fields={"upstream_target": CustomFieldValue(text=upstream or "")},
+                **parent,
+            )
+        )
+
     for vh in vhosts:
         if not vh.ports:
             continue
-        extra = [f"{path} -> {target}" for path, target in sorted(vh.locations.items()) if path != "/"]
-        description = f"Nginx vhost -> {vh.upstream}" if vh.upstream else "Nginx vhost (no proxy_pass)"
-        custom_fields = {"upstream_target": CustomFieldValue(text=vh.upstream)} if vh.upstream else None
-        service = Service(
-            name=vh.name[:100],
-            port_mappings=[f"tcp/{p}" for p in sorted(vh.ports)],
-            description=description[:200],
-            comments="\n".join(extra) if extra else None,
-            tags=[settings.tag],
-            custom_fields=custom_fields,
-            **parent,
-        )
-        entities.append(Entity(service=service))
+        ports = sorted(vh.ports)
+        root = vh.locations.get("/", "")
+        routes = {path: target for path, target in vh.locations.items() if path != "/"}
+        comments = "\n".join(f"{path} -> {target}" for path, target in sorted(routes.items())) or None
+        description = f"Nginx vhost -> {root}" if root else f"Nginx vhost ({len(routes)} routes)"
+        # the vhost itself (root location)
+        entities.append(service(vh.name, root, description, comments))
+        # one service per proxied path, e.g. "proxy.example.com/bastion" -> 192.168.1.5:8080
+        for path, target in sorted(routes.items()):
+            if path.startswith(("~", "@")):
+                continue  # regex / named locations stay in the vhost comments
+            entities.append(service(f"{vh.name}{path.rstrip('/')}", target, f"Nginx {vh.name}{path} -> {target}"))
     return entities
 
 

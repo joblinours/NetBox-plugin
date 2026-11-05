@@ -198,3 +198,48 @@ class JobTest(TestCase):
                 jobs.run_sync()
         self.assertEqual(SourceStatus.objects.get(name="cloudflare").status, "failed")
         self.assertIn("No tunnel visible", SourceStatus.objects.get(name="cloudflare").message)
+
+
+class PathRoutingTest(TestCase):
+    """One Nginx vhost routing several paths to different backends (location /bastion/, /mail/...)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        SyncTest.setUpTestData.__func__(cls)
+        for name, upstream in (
+            ("proxy.example.com", ""),
+            ("proxy.example.com/bastion", "http://192.168.1.20:8080"),
+            ("proxy.example.com/mail", "https://192.168.1.40:443"),
+        ):
+            Service(
+                name=name, parent=cls.proxy, port_mappings=["tcp/80"], custom_field_data={"upstream_target": upstream}
+            ).save()
+
+    def test_every_path_is_linked(self):
+        from netbox_cmdb import inventory
+
+        ingress = [{"hostname": "proxy.example.com", "service": "http://192.168.1.30:80"}]
+        result = sync(FakeClient(ingress), SETTINGS)
+        self.assertEqual(result.services_created, 2)
+        obj = PublicHostname.objects.get(hostname="proxy.example.com")
+        self.assertEqual(obj.exposure, "nginx")
+        self.assertEqual(obj.proxy_service.name, "proxy.example.com")
+        self.assertIn("/bastion -> http://192.168.1.20:8080", obj.upstream)
+        self.assertIn("2 routes, 2 linked", obj.resolution)
+
+        bastion = Service.objects.get(parent_object_id=self.app.pk, port_mappings__contains=["tcp/8080"])
+        self.assertEqual(bastion.custom_field_data["public_url"], "proxy.example.com/bastion")
+        self.assertEqual(bastion.custom_field_data["exposure_path"], "nginx")
+        mail = Service.objects.get(parent_object_id=self.mail.pk, port_mappings__contains=["tcp/443"])
+        self.assertEqual(mail.custom_field_data["public_url"], "proxy.example.com/mail")
+        route = Service.objects.get(name="proxy.example.com/bastion", parent_object_id=self.proxy.pk)
+        self.assertEqual(route.custom_field_data["public_url"], "proxy.example.com/bastion")
+
+        again = sync(FakeClient(ingress), SETTINGS)
+        self.assertEqual((again.created, again.updated, again.services_created, again.services_updated), (0, 0, 0, 0))
+
+        urls = inventory.public_urls(None)
+        self.assertEqual(urls[0]["nginx_host"], "revers-proxy")
+        self.assertEqual(
+            [(r["path"], r["host"]) for r in urls[0]["routes"]], [("/bastion", "app01"), ("/mail", "mail")]
+        )

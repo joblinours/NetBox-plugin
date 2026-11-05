@@ -28,6 +28,7 @@ def test_vhosts():
         "wiki.example.com",
         "local.example.com",
         "stream-2222",
+        "proxy.example.com",
     }
 
     cloud = vhosts["cloud.example.com"]
@@ -65,3 +66,24 @@ def test_entities():
     assert cloud.custom_fields["upstream_target"].text == "http://192.168.1.21:11000"
     assert [t.name for t in cloud.tags] == ["nginx-agent"]
     assert "/push/ -> http://192.168.1.21:7867" in cloud.comments
+
+
+def test_path_routing_vhost():
+    vhosts = {v.name: v for v in vhosts_from_dump(SAMPLE)}
+    proxy = vhosts["proxy.example.com"]
+    assert "/" not in proxy.locations  # "location = /" only redirects
+    assert proxy.locations["/bastion/"] == "http://192.168.1.5:8080"
+    assert proxy.locations["/slides/"] == "http://192.168.1.13:8084"
+    assert vhosts["git.example.com"].locations["~ ^/api/(.*)$"] == "https://192.168.1.25:3000"
+
+    settings = Settings(
+        diode_target="grpc://x/diode", client_id="c", client_secret="s", parent_name="revers-proxy", cluster="homelab"
+    )
+    services = {e.service.name: e.service for e in build_entities(vhosts_from_dump(SAMPLE), settings)}
+    assert services["proxy.example.com"].custom_fields["upstream_target"].text == ""
+    assert services["proxy.example.com/bastion"].custom_fields["upstream_target"].text == "http://192.168.1.5:8080"
+    assert services["proxy.example.com/iptv-dev"].custom_fields["upstream_target"].text == "http://192.168.1.13:8081"
+    assert list(services["proxy.example.com/slides"].port_mappings) == ["tcp/80"]
+    assert services["cloud.example.com/push"].custom_fields["upstream_target"].text == "http://192.168.1.21:7867"
+    # regex locations are not split into services
+    assert not any(name.startswith("git.example.com/") for name in services)
