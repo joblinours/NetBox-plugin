@@ -25,17 +25,17 @@ Ce dépôt contient tout ce qu'il faut pour faire tourner la CMDB du homelab : N
 
 ```
                          ┌──────────────────────── stack Portainer « cmdb » (LXC 192.168.1.13) ─────────────────────────┐
- navigateur ── :8000 ──▶ │ netbox ── netbox-worker (jobs planifiés : Proxmox, Cloudflare)    postgres  valkey           │
+ navigateur ── :10000 ─▶ │ netbox ── netbox-worker (jobs planifiés : Proxmox, Cloudflare)    postgres  valkey           │
                          │   ▲  └── API Proxmox (proxmox2netbox)  └── API Cloudflare (plugin maison)                     │
                          │   │ API plugin Diode                                                                           │
-                         │ diode-reconciler ◀── diode-ingester ◀── diode-gateway (nginx, gRPC + OAuth2) ◀── :8081 ──────┼── nginx-agent (revers-proxy)
+                         │ diode-reconciler ◀── diode-ingester ◀── diode-gateway (nginx, gRPC + OAuth2) ◀── :10001 ─────┼── nginx-agent (revers-proxy)
                          │                         diode-auth ── hydra ── diode-postgres, diode-redis   ▲                │
                          │ orb-agent (réseau hôte, nmap 192.168.1.0/24) ─────────────────────────────────┘                │
                          └────────────────────────────────────────────────────────────────────────────────────────────────┘
- Zabbix ── :8000/api/plugins/cmdb/health/ et :8081
+ Zabbix ── :10000/api/plugins/cmdb/health/ et :10001
 ```
 
-Seuls deux ports sont publiés : l'interface NetBox (`NETBOX_PORT`, 8000) et l'entrée gRPC de Diode (`DIODE_GRPC_PORT`, 8081). Tout le reste reste sur le réseau interne de la stack. orb-agent tourne en réseau hôte pour voir le LAN et joint Diode et NetBox par leurs ports publiés.
+Seuls deux ports sont publiés : l'interface NetBox (`NETBOX_PORT`, 10000) et l'entrée gRPC de Diode (`DIODE_GRPC_PORT`, 10001). Tout le reste reste sur le réseau interne de la stack. orb-agent tourne en réseau hôte pour voir le LAN et joint Diode et NetBox par leurs ports publiés.
 
 ### Sources automatiques
 
@@ -55,7 +55,7 @@ Toutes les sources sont idempotentes : une deuxième exécution ne crée aucun d
 
 ## Utiliser la CMDB
 
-- **Claude Code (MCP)** : `claude mcp add --transport http --scope user cmdb http://192.168.1.13:8000/api/plugins/mcp/ --header "Authorization: Bearer <CMDB_TOKEN_MCP>"`. Claude peut alors vérifier un port ou une IP, proposer des ports/IPs libres, lire la fiche d'un hôte, lister les URLs, noms DNS et conteneurs. Détails : [plugins/netbox-cmdb-mcp/README.md](plugins/netbox-cmdb-mcp/README.md).
+- **Claude Code (MCP)** : `claude mcp add --transport http --scope user cmdb http://192.168.1.13:10000/api/plugins/mcp/ --header "Authorization: Bearer <CMDB_TOKEN_MCP>"`. Claude peut alors vérifier un port ou une IP, proposer des ports/IPs libres, lire la fiche d'un hôte, lister les URLs, noms DNS et conteneurs. Détails : [plugins/netbox-cmdb-mcp/README.md](plugins/netbox-cmdb-mcp/README.md).
 - **Export** : menu *Plugins > Export CMDB* (Markdown, PDF, JSON, graphe Mermaid / PNG / SVG), ou `GET /api/plugins/export/<format>/` avec un token. Détails : [plugins/netbox-cmdb-export/README.md](plugins/netbox-cmdb-export/README.md).
 
 ## Déploiement (première fois)
@@ -74,7 +74,7 @@ Toutes les sources sont idempotentes : une deuxième exécution ne crée aucun d
    - Environment variables > *Advanced mode* : coller le contenu de `cmdb.env`
    - Deploy. Les images sont publiques sur GHCR : aucun identifiant de registre.
 4. **Premier démarrage** (quelques minutes, migrations comprises) : NetBox applique les migrations, crée le compte admin, puis `cmdb_bootstrap` crée les custom fields, les comptes de service `svc-*` avec leurs tokens et l'endpoint Proxmox. Les clients OAuth2 de Diode sont créés par `diode-bootstrap`.
-5. **Vérifier** : se connecter sur `http://192.168.1.13:8000` ; `Diode > Settings` affiche la cible Diode et `Diode > Client Credentials` s'ouvre sans erreur (preuve que NetBox s'authentifie auprès de Diode) ; `CMDB > Source health` liste l'état de chaque source. Les clients OAuth2 créés par la stack (`orb-agent`, `nginx-agent`) sont gérés par les variables et n'apparaissent pas dans cette liste, qui ne montre que les clients créés depuis l'interface.
+5. **Vérifier** : se connecter sur `http://192.168.1.13:10000` ; `Diode > Settings` affiche la cible Diode et `Diode > Client Credentials` s'ouvre sans erreur (preuve que NetBox s'authentifie auprès de Diode) ; `CMDB > Source health` liste l'état de chaque source. Les clients OAuth2 créés par la stack (`orb-agent`, `nginx-agent`) sont gérés par les variables et n'apparaissent pas dans cette liste, qui ne montre que les clients créés depuis l'interface.
 6. **Installer l'agent Nginx** sur revers-proxy : voir [agents/nginx-agent/README.md](agents/nginx-agent/README.md).
 7. **Agents Docker** sur les autres hôtes Docker : voir [agents/docker-agent/README.md](agents/docker-agent/README.md) (celui du LXC tourne déjà dans la stack).
 8. **Zabbix** : importer `monitoring/zabbix/cmdb_netbox_template.yaml`, l'associer à l'hôte de la CMDB et renseigner la macro `{$CMDB.TOKEN}` avec `CMDB_TOKEN_ZABBIX`.
@@ -89,7 +89,7 @@ Toutes les variables sont listées et commentées dans [deploy/stack.env.example
 | --- | --- |
 | `CMDB_IMAGE_TAG` | `latest` (main), `dev`, une version `1.2.3`, ou `sha-<commit>` |
 | `DOCKER_HOST_IP`, `BIND_ADDRESS` | IP de l'hôte Docker ; `BIND_ADDRESS` permet de n'écouter que sur l'interface LAN |
-| `NETBOX_PORT`, `DIODE_GRPC_PORT` | Ports publiés (8000 et 8081) |
+| `NETBOX_PORT`, `DIODE_GRPC_PORT` | Ports publiés (10000 et 10001 ; 8000 est pris par Portainer) |
 | `PROXMOX_*` | Endpoint Proxmox (un seul nœud suffit, tout le cluster est lu) |
 | `CLOUDFLARE_*`, `NGINX_PROXY_HOSTS` | Plugin Cloudflare et détection du passage par Nginx |
 | `SCAN_*` | Cibles, planification et profondeur du scan orb-agent |

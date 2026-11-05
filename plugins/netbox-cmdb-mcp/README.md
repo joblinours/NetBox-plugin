@@ -4,14 +4,14 @@ Serveur **MCP** (Model Context Protocol) en lecture seule, servi par NetBox lui-
 
 *Read-only MCP server served by NetBox (streamable HTTP, stateless, JSON responses).*
 
-- Endpoint : `http://<cmdb>:8000/api/plugins/mcp/` (POST JSON-RPC, transport « streamable HTTP » sans session).
+- Endpoint : `http://<cmdb>:10000/api/plugins/mcp/` (POST JSON-RPC, transport « streamable HTTP » sans session).
 - Authentification : token API NetBox (`Authorization: Bearer nbt_…`). Chaque outil ne voit que ce que l'utilisateur du token a le droit de voir ; la stack crée `svc-mcp` (lecture seule) depuis `CMDB_TOKEN_MCP`.
 - Accès local uniquement (LAN / ZeroTier), comme le reste de la CMDB.
 
 ## Brancher Claude Code
 
 ```bash
-claude mcp add --transport http --scope user cmdb http://192.168.1.13:8000/api/plugins/mcp/ \
+claude mcp add --transport http --scope user cmdb http://192.168.1.13:10000/api/plugins/mcp/ \
   --header "Authorization: Bearer <CMDB_TOKEN_MCP>"
 ```
 

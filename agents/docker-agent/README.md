@@ -14,7 +14,7 @@ Dans Portainer, sur l'environnement de cet hôte : *Stacks > Add stack > Reposit
 
 | Variable | Valeur |
 | --- | --- |
-| `NETBOX_URL` | `http://192.168.1.13:8000` |
+| `NETBOX_URL` | `http://192.168.1.13:10000` |
 | `CMDB_TOKEN_DOCKER_AGENT` | même valeur que dans la stack CMDB |
 | `DOCKER_AGENT_HOST_NAME` | nom de la VM dans NetBox |
 | `DOCKER_AGENT_ADDRESSES` | IP de l'hôte (aide au rattachement) |

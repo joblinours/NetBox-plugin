@@ -25,7 +25,7 @@ Everything needed to run the homelab CMDB: NetBox as the source of truth, filled
 
 Two blocks in one stack: **NetBox** (netbox, netbox-worker, postgres, valkey) stores and serves the inventory; **Diode** (diode-gateway, diode-ingester, diode-reconciler, diode-auth, hydra, diode-postgres, diode-redis) receives and reconciles data before writing it to NetBox through the Diode plugin API. orb-agent runs in the same stack with host networking so nmap sees the LAN.
 
-Only two ports are published: the NetBox UI/API (`NETBOX_PORT`, 8000) and the Diode gRPC entry point (`DIODE_GRPC_PORT`, 8081).
+Only two ports are published: the NetBox UI/API (`NETBOX_PORT`, 10000) and the Diode gRPC entry point (`DIODE_GRPC_PORT`, 10001); 8000 is taken by Portainer.
 
 ### Automatic sources
 
@@ -39,7 +39,7 @@ Only two ports are published: the NetBox UI/API (`NETBOX_PORT`, 8000) and the Di
 | AdGuard Home | `netbox-adguard`: DNS rewrites → IP/host (`local_domains` custom field) and A/CNAME records in netbox-plugin-dns | `ADGUARD_SYNC_INTERVAL` (1440 min) | `adguard` |
 | Docker | `cmdb-docker-agent` on each Docker host → `netbox-docker-inventory` (containers, stacks, internal networks; published ports become NetBox services with the Portainer stack) | hourly | `docker-<host>` |
 
-**Claude Code (MCP)**: `claude mcp add --transport http --scope user cmdb http://192.168.1.13:8000/api/plugins/mcp/ --header "Authorization: Bearer <CMDB_TOKEN_MCP>"`. **Export**: *Plugins > Export CMDB* or `GET /api/plugins/export/<md|pdf|json|mmd|png|svg>/`.
+**Claude Code (MCP)**: `claude mcp add --transport http --scope user cmdb http://192.168.1.13:10000/api/plugins/mcp/ --header "Authorization: Bearer <CMDB_TOKEN_MCP>"`. **Export**: *Plugins > Export CMDB* or `GET /api/plugins/export/<md|pdf|json|mmd|png|svg>/`.
 
 Exposure path: when the origin of a Cloudflare hostname is the revers-proxy IP (`NGINX_PROXY_HOSTS`) the hostname is "via Nginx"; the plugin finds the vhost pushed by the Nginx agent, reads its upstream and attaches the public URL to the final service (e.g. `cloud.example.com` → revers-proxy:443 → nextcloud:11000). Otherwise it is "cloudflared direct" and attached to the service of the origin VM. All sources are idempotent.
 
@@ -51,7 +51,7 @@ Exposure path: when the origin of a Cloudflare hostname is the revers-proxy IP (
 2. **Generate the variables**: `python3 tools/generate-env.py > cmdb.env`, fill in `PROXMOX_*`, `CLOUDFLARE_*`, `NGINX_PROXY_HOSTS`, `NETBOX_ADMIN_USER`. Store the file in Vaultwarden; never commit it.
 3. **Portainer**: `Stacks > Add stack > Repository`, URL `https://github.com/joblinours/NetBox-plugin`, reference `refs/heads/main`, compose path `deploy/docker-compose.yml`, paste `cmdb.env` in *Environment variables > Advanced mode*, deploy. GHCR images are public.
 4. **First start** (a few minutes): migrations, admin account, then `cmdb_bootstrap` creates the custom fields, the `svc-*` service accounts and tokens, and the Proxmox endpoint; `diode-bootstrap` creates the Diode OAuth2 clients.
-5. **Check**: log in on `http://192.168.1.13:8000`; `Diode > Settings` shows the Diode target without error; `CMDB > Source health` shows each source.
+5. **Check**: log in on `http://192.168.1.13:10000`; `Diode > Settings` shows the Diode target without error; `CMDB > Source health` shows each source.
 6. **Nginx agent** on revers-proxy: see [agents/nginx-agent/README.md](agents/nginx-agent/README.md).
 7. **Zabbix**: import `monitoring/zabbix/cmdb_netbox_template.yaml`, link it to the CMDB host, set `{$CMDB.TOKEN}` to `CMDB_TOKEN_ZABBIX`.
 

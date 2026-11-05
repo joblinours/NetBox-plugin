@@ -43,7 +43,7 @@ x-netbox-env: &netbox-env
   SUPERUSER_PASSWORD: ${NETBOX_ADMIN_PASSWORD:?NETBOX_ADMIN_PASSWORD is required}
   # Diode plugin
   DIODE_TARGET_INTERNAL: grpc://diode-gateway:80/diode
-  DIODE_TARGET_DISPLAY: grpc://${DOCKER_HOST_IP:-127.0.0.1}:${DIODE_GRPC_PORT:-8081}/diode
+  DIODE_TARGET_DISPLAY: grpc://${DOCKER_HOST_IP:-127.0.0.1}:${DIODE_GRPC_PORT:-10001}/diode
   DIODE_CLIENT_SECRET_NETBOX_TO_DIODE: ${DIODE_CLIENT_SECRET_NETBOX_TO_DIODE:?DIODE_CLIENT_SECRET_NETBOX_TO_DIODE is required}
   # Proxmox (proxmox2netbox endpoint, provisioned at start-up)
   PROXMOX_HOST: ${PROXMOX_HOST:-}
@@ -92,7 +92,7 @@ services:
         condition: service_healthy
     environment: *netbox-env
     ports:
-      - "${BIND_ADDRESS:-0.0.0.0}:${NETBOX_PORT:-8000}:8080"
+      - "${BIND_ADDRESS:-0.0.0.0}:${NETBOX_PORT:-10000}:8080"
     volumes:
       - netbox-media:/opt/netbox/netbox/media
       - netbox-reports:/opt/netbox/netbox/reports
@@ -161,7 +161,7 @@ services:
       - diode-ingester
       - diode-reconciler
     ports:
-      - "${BIND_ADDRESS:-0.0.0.0}:${DIODE_GRPC_PORT:-8081}:80"
+      - "${BIND_ADDRESS:-0.0.0.0}:${DIODE_GRPC_PORT:-10001}:80"
 
   diode-ingester:
     image: docker.io/netboxlabs/diode-ingester:${DIODE_VERSION:-2.4.0}
@@ -325,7 +325,7 @@ services:
       - NET_RAW
       - NET_ADMIN
     environment:
-      DIODE_TARGET: grpc://${DOCKER_HOST_IP:-127.0.0.1}:${DIODE_GRPC_PORT:-8081}/diode
+      DIODE_TARGET: grpc://${DOCKER_HOST_IP:-127.0.0.1}:${DIODE_GRPC_PORT:-10001}/diode
       DIODE_CLIENT_ID: orb-agent
       DIODE_CLIENT_SECRET: ${DIODE_CLIENT_SECRET_ORB_AGENT}
       ORB_AGENT_NAME: ${ORB_AGENT_NAME:-cmdb-orb-agent}
@@ -335,7 +335,7 @@ services:
       SCAN_TIMEOUT_MINUTES: ${SCAN_TIMEOUT_MINUTES:-120}
       SCAN_STARTUP: ${SCAN_STARTUP:-true}
       ORB_DISCOVERY_PORT: ${ORB_DISCOVERY_PORT:-8073}
-      NETBOX_URL: http://${DOCKER_HOST_IP:-127.0.0.1}:${NETBOX_PORT:-8000}
+      NETBOX_URL: http://${DOCKER_HOST_IP:-127.0.0.1}:${NETBOX_PORT:-10000}
       NETBOX_TOKEN: ${CMDB_TOKEN_ORB_AGENT:-}
     depends_on:
       - diode-gateway
