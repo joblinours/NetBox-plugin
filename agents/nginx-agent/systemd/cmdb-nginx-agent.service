@@ -1,0 +1,14 @@
+[Unit]
+Description=CMDB Nginx discovery agent (push vhosts to NetBox through Diode)
+Wants=network-online.target
+After=network-online.target nginx.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/cmdb-nginx-agent.env
+ExecStart=/opt/cmdb-nginx-agent/bin/cmdb-nginx-agent
+# nginx -T only reads the configuration; it may still open its log files.
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true

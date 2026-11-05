@@ -1,0 +1,10 @@
+line-length = 120
+target-version = "py312"
+extend-exclude = ["**/migrations/*"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["B904", "UP031"]
+
+[lint.isort]
+known-third-party = ["netbox", "dcim", "ipam", "extras", "users", "core", "virtualization", "utilities"]

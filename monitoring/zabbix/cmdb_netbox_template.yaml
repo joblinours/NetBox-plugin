@@ -1,0 +1,296 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: a8e5d9506b2d439b85cf7a8ca4773ed0
+      name: Templates/Applications
+  templates:
+    - uuid: ddf46959d58342018b4ce4ed5822ee36
+      template: 'CMDB NetBox by HTTP'
+      name: 'CMDB NetBox by HTTP'
+      description: |
+        Homelab CMDB (NetBox + Diode): NetBox UI/API availability, RQ workers,
+        Diode gRPC entry point, and the outcome of every automatic data source
+        (Proxmox, Cloudflare, network scan, Nginx) from /api/plugins/cmdb/health/.
+        Set {$CMDB.TOKEN} to the CMDB_TOKEN_ZABBIX stack variable.
+        https://github.com/joblinours/NetBox-plugin
+      groups:
+        - name: Templates/Applications
+      items:
+        - uuid: bc757f2c50f345788878d5eb6f19e399
+          name: 'NetBox: CMDB health (raw)'
+          type: HTTP_AGENT
+          key: cmdb.health.raw
+          delay: 5m
+          history: 1d
+          value_type: TEXT
+          trends: '0'
+          timeout: 15s
+          url: '{$CMDB.URL}/api/plugins/cmdb/health/'
+          headers:
+            - name: Authorization
+              value: 'Bearer {$CMDB.TOKEN}'
+            - name: Accept
+              value: application/json
+          tags:
+            - tag: component
+              value: raw
+          triggers:
+            - uuid: 3f1f5c5f1cb14da3b75f90b48462f678
+              expression: 'nodata(/CMDB NetBox by HTTP/cmdb.health.raw,{$CMDB.NODATA})=1'
+              name: 'NetBox: API unavailable (no health data for {$CMDB.NODATA})'
+              priority: HIGH
+              description: 'NetBox does not answer on {$CMDB.URL} or the Zabbix token is refused.'
+              tags:
+                - tag: scope
+                  value: availability
+        - uuid: d94995d960854c2281a91014ec94541f
+          name: 'NetBox: database'
+          type: DEPENDENT
+          key: cmdb.health.database
+          delay: '0'
+          value_type: CHAR
+          trends: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.database
+          master_item:
+            key: cmdb.health.raw
+          tags:
+            - tag: component
+              value: netbox
+          triggers:
+            - uuid: bc0d58e89b1e41d19daf2bdb4c82ff14
+              expression: 'last(/CMDB NetBox by HTTP/cmdb.health.database)<>"ok"'
+              name: 'NetBox: database check failed'
+              priority: HIGH
+        - uuid: 1641a62082234b419611a82d14234e9b
+          name: 'CMDB: unhealthy sources'
+          type: DEPENDENT
+          key: cmdb.health.unhealthy_count
+          delay: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.unhealthy_count
+          master_item:
+            key: cmdb.health.raw
+          tags:
+            - tag: component
+              value: sources
+        - uuid: 94b07e7e2b1443aca711d1a70d959641
+          name: 'NetBox: login page'
+          type: HTTP_AGENT
+          key: cmdb.netbox.login
+          delay: 2m
+          timeout: 10s
+          url: '{$CMDB.URL}/login/'
+          retrieve_mode: HEADERS
+          status_codes: ''
+          preprocessing:
+            - type: REGEX
+              parameters:
+                - 'HTTP\/[\d.]+\s+(\d+)'
+                - \1
+          tags:
+            - tag: component
+              value: netbox
+          triggers:
+            - uuid: f9139880cb0348c9a3441556dd580a8a
+              expression: 'last(/CMDB NetBox by HTTP/cmdb.netbox.login)<>200'
+              name: 'NetBox: web UI unavailable (HTTP {ITEM.LASTVALUE})'
+              priority: HIGH
+              tags:
+                - tag: scope
+                  value: availability
+        - uuid: 80a2e03c030d4904a364babdb7916b44
+          name: 'NetBox: API status (raw)'
+          type: HTTP_AGENT
+          key: cmdb.netbox.status.raw
+          delay: 5m
+          history: 1d
+          value_type: TEXT
+          trends: '0'
+          timeout: 15s
+          url: '{$CMDB.URL}/api/status/'
+          headers:
+            - name: Authorization
+              value: 'Bearer {$CMDB.TOKEN}'
+            - name: Accept
+              value: application/json
+          tags:
+            - tag: component
+              value: raw
+        - uuid: cdfb17b7244e4b499a53f6f044eb16c6
+          name: 'NetBox: version'
+          type: DEPENDENT
+          key: cmdb.netbox.version
+          delay: '0'
+          value_type: CHAR
+          trends: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$["netbox-version"]'
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1d
+          master_item:
+            key: cmdb.netbox.status.raw
+          tags:
+            - tag: component
+              value: netbox
+        - uuid: 290d966d99a84f2ba88c106c5a961d12
+          name: 'NetBox: RQ workers running'
+          type: DEPENDENT
+          key: cmdb.netbox.rq_workers
+          delay: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$["rq-workers-running"]'
+          master_item:
+            key: cmdb.netbox.status.raw
+          tags:
+            - tag: component
+              value: netbox
+          triggers:
+            - uuid: 0a2946708f0348b6bec1a944cf855ef2
+              expression: 'last(/CMDB NetBox by HTTP/cmdb.netbox.rq_workers)<1'
+              name: 'NetBox: no background worker (scheduled syncs will not run)'
+              priority: AVERAGE
+        - uuid: 3d0490a83a55434dbeb815e1092b568f
+          name: 'Diode: gRPC entry point'
+          type: SIMPLE
+          key: 'net.tcp.service[tcp,{$CMDB.DIODE.HOST},{$CMDB.DIODE.PORT}]'
+          delay: 2m
+          valuemap:
+            name: 'Service state'
+          tags:
+            - tag: component
+              value: diode
+          triggers:
+            - uuid: 2bb6bbef5546469f854e1da0080712f2
+              expression: 'max(/CMDB NetBox by HTTP/net.tcp.service[tcp,{$CMDB.DIODE.HOST},{$CMDB.DIODE.PORT}],6m)=0'
+              name: 'Diode: gRPC entry point unreachable'
+              priority: HIGH
+      discovery_rules:
+        - uuid: 5d978c84309d4d5fbb4c9c5ab854e3a6
+          name: 'CMDB sources discovery'
+          type: DEPENDENT
+          key: cmdb.sources.discovery
+          delay: '0'
+          lifetime: 7d
+          master_item:
+            key: cmdb.health.raw
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var data = JSON.parse(value);
+                  return JSON.stringify(Object.keys(data.sources).map(function (name) {
+                      return {"{#SOURCE}": name};
+                  }));
+          item_prototypes:
+            - uuid: bfc010f81ab5416d8b9bdd52085bb6a1
+              name: 'Source {#SOURCE}: healthy'
+              type: DEPENDENT
+              key: 'cmdb.source.healthy[{#SOURCE}]'
+              delay: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.sources["{#SOURCE}"].healthy'
+                - type: BOOL_TO_DECIMAL
+                  parameters:
+                    - ''
+              master_item:
+                key: cmdb.health.raw
+              tags:
+                - tag: source
+                  value: '{#SOURCE}'
+              trigger_prototypes:
+                - uuid: 52421021b3074488a802e591f69b2e45
+                  expression: 'last(/CMDB NetBox by HTTP/cmdb.source.healthy[{#SOURCE}])=0'
+                  name: 'CMDB source {#SOURCE} failed or stale'
+                  opdata: '{ITEM.LASTVALUE}'
+                  priority: AVERAGE
+                  description: 'Last run failed, or no successful run for more than SOURCE_MAX_AGE_HOURS. See NetBox > CMDB > Source health.'
+                  tags:
+                    - tag: scope
+                      value: sources
+            - uuid: 06c69ba1a8bf47468b12431be13fecf4
+              name: 'Source {#SOURCE}: status'
+              type: DEPENDENT
+              key: 'cmdb.source.status[{#SOURCE}]'
+              delay: '0'
+              value_type: CHAR
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.sources["{#SOURCE}"].status'
+              master_item:
+                key: cmdb.health.raw
+              tags:
+                - tag: source
+                  value: '{#SOURCE}'
+            - uuid: 8088c358f57446178ef2cc8d67d2afa5
+              name: 'Source {#SOURCE}: message'
+              type: DEPENDENT
+              key: 'cmdb.source.message[{#SOURCE}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.sources["{#SOURCE}"].message'
+              master_item:
+                key: cmdb.health.raw
+              tags:
+                - tag: source
+                  value: '{#SOURCE}'
+            - uuid: c5d5148c6cc742fb86f7f18b57b75091
+              name: 'Source {#SOURCE}: hours since last success'
+              type: DEPENDENT
+              key: 'cmdb.source.age[{#SOURCE}]'
+              delay: '0'
+              value_type: FLOAT
+              units: h
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.sources["{#SOURCE}"].age_hours'
+                  error_handler: DISCARD_VALUE
+              master_item:
+                key: cmdb.health.raw
+              tags:
+                - tag: source
+                  value: '{#SOURCE}'
+      tags:
+        - tag: class
+          value: software
+        - tag: target
+          value: netbox
+      macros:
+        - macro: '{$CMDB.URL}'
+          value: 'http://192.168.1.13:8000'
+          description: 'NetBox base URL'
+        - macro: '{$CMDB.TOKEN}'
+          type: SECRET_TEXT
+          description: 'NetBox API token of svc-zabbix (stack variable CMDB_TOKEN_ZABBIX)'
+        - macro: '{$CMDB.DIODE.HOST}'
+          value: 192.168.1.13
+        - macro: '{$CMDB.DIODE.PORT}'
+          value: '8081'
+        - macro: '{$CMDB.NODATA}'
+          value: 15m
+      valuemaps:
+        - uuid: b269c3283ed0497cbd7fd47aa513d673
+          name: 'Service state'
+          mappings:
+            - value: '0'
+              newvalue: Down
+            - value: '1'
+              newvalue: Up
