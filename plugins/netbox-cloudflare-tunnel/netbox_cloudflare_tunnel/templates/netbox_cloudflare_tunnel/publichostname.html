@@ -1,0 +1,22 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+{% block content %}
+<div class="row mb-3">
+  <div class="col col-md-6">
+    <div class="card">
+      <h2 class="card-header">Public hostname</h2>
+      <table class="table table-hover attr-table">
+        <tr><th scope="row">Hostname</th><td><a href="https://{{ object.hostname }}{{ object.path }}" target="_blank" rel="noopener">{{ object.hostname }}{{ object.path }}</a></td></tr>
+        <tr><th scope="row">Tunnel</th><td>{{ object.tunnel|linkify }}</td></tr>
+        <tr><th scope="row">Origin</th><td><code>{{ object.origin }}</code></td></tr>
+        <tr><th scope="row">Exposure path</th><td>{% badge object.get_exposure_display bg_color=object.get_exposure_color %}</td></tr>
+        <tr><th scope="row">Nginx vhost</th><td>{{ object.proxy_service|linkify|placeholder }}</td></tr>
+        <tr><th scope="row">Upstream</th><td>{% if object.upstream %}<code>{{ object.upstream }}</code>{% else %}{{ ''|placeholder }}{% endif %}</td></tr>
+        <tr><th scope="row">Target service</th><td>{% if object.service %}{{ object.service|linkify }} on {{ object.service.parent|linkify }}{% else %}{{ ''|placeholder }}{% endif %}</td></tr>
+        <tr><th scope="row">Resolution</th><td>{{ object.resolution|placeholder }}</td></tr>
+      </table>
+    </div>
+    {% include 'inc/panels/tags.html' %}
+  </div>
+</div>
+{% endblock %}

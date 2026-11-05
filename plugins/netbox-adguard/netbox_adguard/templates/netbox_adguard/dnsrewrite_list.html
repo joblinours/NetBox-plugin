@@ -1,0 +1,9 @@
+{% extends 'generic/object_list.html' %}
+{% block extra_controls %}
+  {% if perms.netbox_adguard.change_dnsrewrite %}
+    <form action="{% url 'plugins:netbox_adguard:sync' %}" method="post" class="d-inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary"><i class="mdi mdi-sync"></i> Sync now</button>
+    </form>
+  {% endif %}
+{% endblock %}

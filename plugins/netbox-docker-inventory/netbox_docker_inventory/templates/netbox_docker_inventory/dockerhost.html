@@ -1,0 +1,29 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+{% load render_table from django_tables2 %}
+{% block content %}
+<div class="row mb-3">
+  <div class="col col-md-6">
+    <div class="card">
+      <h2 class="card-header">Docker host</h2>
+      <table class="table table-hover attr-table">
+        <tr><th scope="row">Name</th><td>{{ object.name }}</td></tr>
+        <tr><th scope="row">NetBox host</th><td>{% if object.virtual_machine %}{{ object.virtual_machine|linkify }}{% else %}{{ object.device|linkify|placeholder }}{% endif %}</td></tr>
+        <tr><th scope="row">Engine hostname</th><td>{{ object.hostname|placeholder }}</td></tr>
+        <tr><th scope="row">Docker version</th><td>{{ object.engine_version|placeholder }}</td></tr>
+        <tr><th scope="row">OS</th><td>{{ object.operating_system|placeholder }}</td></tr>
+        <tr><th scope="row">Addresses</th><td>{{ object.addresses|join:", "|placeholder }}</td></tr>
+        <tr><th scope="row">Agent version</th><td>{{ object.agent_version|placeholder }}</td></tr>
+        <tr><th scope="row">Last seen</th><td>{{ object.last_seen|isodatetime|placeholder }}</td></tr>
+      </table>
+    </div>
+    {% include 'inc/panels/tags.html' %}
+  </div>
+</div>
+<div class="row mb-3"><div class="col col-md-12"><div class="card">
+  <h2 class="card-header">Containers</h2>{% render_table containers_table 'inc/table.html' %}
+</div></div></div>
+<div class="row"><div class="col col-md-12"><div class="card">
+  <h2 class="card-header">Networks</h2>{% render_table networks_table 'inc/table.html' %}
+</div></div></div>
+{% endblock %}

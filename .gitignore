@@ -1,0 +1,14 @@
+# Real stack variables: never commit (Vaultwarden only)
+*.env
+!*.env.example
+!deploy/stack.env.example
+cmdb.env
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/

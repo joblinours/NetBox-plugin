@@ -1,0 +1,10 @@
+# Plugins tiers installés depuis PyPI — versions épinglées, vérifiées pour NetBox 4.7.x
+# Third-party plugins from PyPI — pinned versions, checked against NetBox 4.7.x
+netboxlabs-diode-netbox-plugin==1.19.0
+netbox-topology-views==5.0.1
+proxmox2netbox==1.2.12
+netbox-plugin-dns==1.7.3
+netbox-lists==4.0.4
+netbox-security==1.6.9
+netboxlabs-netbox-custom-objects==1.0.0
+netbox-routing==0.5.1

@@ -1,0 +1,46 @@
+{% extends 'generic/_base.html' %}
+{% block title %}Export CMDB{% endblock %}
+{% block content %}
+<div class="row mb-3">
+  <div class="col col-md-4">
+    <div class="card">
+      <h2 class="card-header">Document</h2>
+      <div class="card-body d-grid gap-2">
+        <a class="btn btn-primary" href="{% url 'plugins:netbox_cmdb_export:file' 'md' %}"><i class="mdi mdi-language-markdown"></i> Markdown</a>
+        <a class="btn btn-primary" href="{% url 'plugins:netbox_cmdb_export:file' 'pdf' %}"><i class="mdi mdi-file-pdf-box"></i> PDF</a>
+        <a class="btn btn-outline-secondary" href="{% url 'plugins:netbox_cmdb_export:file' 'json' %}"><i class="mdi mdi-code-json"></i> JSON</a>
+      </div>
+    </div>
+  </div>
+  <div class="col col-md-8">
+    <div class="card">
+      <h2 class="card-header">Topology graph</h2>
+      <div class="card-body">
+        <div class="mb-2">
+          {% if containers %}<a href="?">Group containers by stack</a>{% else %}<a href="?containers=1">Show every container</a>{% endif %}
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+          <a class="btn btn-primary" href="{% url 'plugins:netbox_cmdb_export:file' 'png' %}{% if containers %}?containers=1{% endif %}"><i class="mdi mdi-file-image"></i> PNG</a>
+          <a class="btn btn-primary" href="{% url 'plugins:netbox_cmdb_export:file' 'svg' %}{% if containers %}?containers=1{% endif %}"><i class="mdi mdi-svg"></i> SVG</a>
+          <a class="btn btn-primary" href="{% url 'plugins:netbox_cmdb_export:file' 'mmd' %}{% if containers %}?containers=1{% endif %}"><i class="mdi mdi-graph"></i> Mermaid</a>
+          <a class="btn btn-outline-secondary" href="{% url 'plugins:netbox_cmdb_export:file' 'dot' %}{% if containers %}?containers=1{% endif %}">Graphviz DOT</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="row">
+  <div class="col col-md-12">
+    <div class="card">
+      <h2 class="card-header">Preview</h2>
+      <div class="card-body text-center">
+        <img src="{% url 'plugins:netbox_cmdb_export:file' 'svg' %}?inline=1{% if containers %}&containers=1{% endif %}" alt="CMDB topology" style="max-width:100%">
+      </div>
+      <div class="card-body">
+        <h3 class="h6">Mermaid</h3>
+        <pre class="mb-0"><code>{{ mermaid }}</code></pre>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

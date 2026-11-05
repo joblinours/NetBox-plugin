@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netbox-cloudflare-tunnel"
+version = "0.1.0"
+description = "NetBox plugin: sync Cloudflare Tunnel public hostnames (ingress) and map them to NetBox services, directly or through an Nginx reverse proxy."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Lucas Joblin" }]
+requires-python = ">=3.12"
+dependencies = ["requests>=2.31"]
+classifiers = [
+    "Framework :: Django",
+    "Programming Language :: Python :: 3",
+]
+
+[project.urls]
+Repository = "https://github.com/joblinours/NetBox-plugin"
+
+[tool.setuptools.packages.find]
+include = ["netbox_cloudflare_tunnel*"]
+
+[tool.setuptools.package-data]
+netbox_cloudflare_tunnel = ["templates/**/*"]

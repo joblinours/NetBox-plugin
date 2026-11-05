@@ -1,0 +1,29 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+{% load render_table from django_tables2 %}
+{% block content %}
+<div class="row mb-3">
+  <div class="col col-md-6">
+    <div class="card">
+      <h2 class="card-header">Tunnel</h2>
+      <table class="table table-hover attr-table">
+        <tr><th scope="row">Name</th><td>{{ object.name }}</td></tr>
+        <tr><th scope="row">Tunnel ID</th><td><code>{{ object.tunnel_id }}</code></td></tr>
+        <tr><th scope="row">Account</th><td><code>{{ object.account_id }}</code></td></tr>
+        <tr><th scope="row">Status</th><td>{{ object.status|placeholder }}</td></tr>
+        <tr><th scope="row">Dashboard-managed</th><td>{% checkmark object.remote_config %}</td></tr>
+        <tr><th scope="row">Last synced</th><td>{{ object.last_synced|isodatetime|placeholder }}</td></tr>
+      </table>
+    </div>
+    {% include 'inc/panels/tags.html' %}
+  </div>
+</div>
+<div class="row">
+  <div class="col col-md-12">
+    <div class="card">
+      <h2 class="card-header">Public hostnames</h2>
+      {% render_table hostnames_table 'inc/table.html' %}
+    </div>
+  </div>
+</div>
+{% endblock %}

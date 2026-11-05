@@ -1,0 +1,33 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+{% block content %}
+<div class="row mb-3">
+  <div class="col col-md-6">
+    <div class="card">
+      <h2 class="card-header">Docker network</h2>
+      <table class="table table-hover attr-table">
+        <tr><th scope="row">Name</th><td>{{ object.name }}</td></tr>
+        <tr><th scope="row">Host</th><td>{{ object.host|linkify }}</td></tr>
+        <tr><th scope="row">Stack</th><td>{{ object.stack|placeholder }}</td></tr>
+        <tr><th scope="row">Driver / scope</th><td>{{ object.driver|placeholder }} / {{ object.scope|placeholder }}</td></tr>
+        <tr><th scope="row">Internal (no outbound)</th><td>{% checkmark object.internal %}</td></tr>
+        <tr><th scope="row">Subnets</th><td>{{ object.subnets|join:", "|placeholder }}</td></tr>
+        <tr><th scope="row">Gateways</th><td>{{ object.gateways|join:", "|placeholder }}</td></tr>
+        <tr><th scope="row">ID</th><td><code>{{ object.network_id|truncatechars:20 }}</code></td></tr>
+      </table>
+    </div>
+    {% include 'inc/panels/tags.html' %}
+  </div>
+  <div class="col col-md-6">
+    <div class="card">
+      <h2 class="card-header">Attached containers</h2>
+      <table class="table table-hover">
+        <thead><tr><th>Container</th><th>IP</th><th>Aliases</th></tr></thead>
+        {% for c, ip, aliases in attachments %}
+          <tr><td>{{ c|linkify }}</td><td>{{ ip|placeholder }}</td><td>{{ aliases|placeholder }}</td></tr>
+        {% empty %}<tr><td colspan="3" class="text-muted">None</td></tr>{% endfor %}
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

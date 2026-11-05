@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the CMDB Nginx discovery agent daily
+
+[Timer]
+OnBootSec=5min
+OnCalendar=*-*-* 04:00:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

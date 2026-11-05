@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netbox-cmdb"
+version = "0.1.0"
+description = "Homelab CMDB glue for NetBox: base data model, service accounts, scheduled Proxmox sync and source health for Zabbix."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Lucas Joblin" }]
+requires-python = ">=3.12"
+dependencies = []
+classifiers = [
+    "Framework :: Django",
+    "Programming Language :: Python :: 3",
+]
+
+[project.urls]
+Repository = "https://github.com/joblinours/NetBox-plugin"
+
+[tool.setuptools.packages.find]
+include = ["netbox_cmdb*"]
+
+[tool.setuptools.package-data]
+netbox_cmdb = ["templates/**/*"]

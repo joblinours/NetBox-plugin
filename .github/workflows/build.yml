@@ -1,0 +1,178 @@
+name: Test, build and publish
+
+on:
+  push:
+    branches: [main, dev]
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: [main, dev]
+  schedule:
+    # Weekly rebuild (Monday 04:17 UTC) to pick up base image fixes.
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/joblinours/netbox-cmdb
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Ruff
+        run: |
+          pip install ruff==0.15.14
+          ruff check plugins agents image tools
+          ruff format --check --diff plugins agents image tools || echo "::warning::ruff format differences"
+      - name: Shell scripts
+        run: |
+          sudo apt-get install -y shellcheck >/dev/null
+          shellcheck -S warning image/orb-agent/cmdb-entry.sh image/netbox/launch-cmdb.sh image/diode-bootstrap/bootstrap-clients.sh
+      - name: Stack file
+        run: |
+          python3 tools/generate-env.py > /tmp/ci.env
+          docker compose -f deploy/docker-compose.yml --env-file /tmp/ci.env config -q
+          NETBOX_URL=http://x CMDB_TOKEN_DOCKER_AGENT=t DOCKER_AGENT_HOST_NAME=h docker compose -f deploy/docker-agent.compose.yml config -q
+          python3 tools/generate-env.py --example | diff - deploy/stack.env.example
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks (full Git history)
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.28.0 git /repo --redact --verbose --exit-code 1
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: netbox
+          POSTGRES_PASSWORD: netbox
+          POSTGRES_DB: netbox
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U netbox" --health-interval 5s --health-timeout 5s --health-retries 10
+      valkey:
+        image: valkey/valkey:8.1-alpine
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Agent tests (Nginx, Docker)
+        run: |
+          pip install -e 'agents/nginx-agent[test]' -e 'agents/docker-agent[test]'
+          pytest -q agents/nginx-agent/tests agents/docker-agent/tests
+      - uses: docker/setup-buildx-action@v3
+      - name: Build NetBox image (test)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: image/netbox/Dockerfile
+          load: true
+          tags: netbox-cmdb:ci
+          cache-from: type=gha,scope=netbox
+          cache-to: type=gha,scope=netbox,mode=max
+      - name: Plugins load, migrations are complete, tests pass (NetBox 4.7)
+        run: |
+          docker run --rm --network host \
+            -e DB_HOST=127.0.0.1 -e DB_USER=netbox -e DB_PASSWORD=netbox -e DB_NAME=netbox \
+            -e REDIS_HOST=127.0.0.1 -e REDIS_CACHE_HOST=127.0.0.1 \
+            -e SECRET_KEY=ci-secret-key-ci-secret-key-ci-secret-key-ci-secret-key-ci \
+            -e API_TOKEN_PEPPER_1=ci-pepper-ci-pepper-ci-pepper-ci-pepper-ci-pepper-ci \
+            -e DEVELOPER=true \
+            --entrypoint bash netbox-cmdb:ci -c '
+              set -e
+              cd /opt/netbox/netbox
+              python manage.py check
+              python manage.py migrate --no-input >/dev/null
+              python manage.py makemigrations --check --dry-run netbox_cmdb netbox_cloudflare_tunnel netbox_adguard netbox_docker_inventory
+              python manage.py cmdb_bootstrap
+              python - <<PY
+          import django, os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "netbox.settings")
+          django.setup()
+          from django.conf import settings
+          expected = 14
+          assert len(settings.PLUGINS) == expected, settings.PLUGINS
+          print("plugins loaded:", ", ".join(settings.PLUGINS))
+          PY
+              python manage.py test --noinput --parallel 1 netbox_cmdb netbox_cloudflare_tunnel netbox_adguard netbox_docker_inventory netbox_cmdb_export netbox_cmdb_mcp
+            '
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [test, secrets-scan]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: netbox
+            image: netbox-cmdb
+            dockerfile: image/netbox/Dockerfile
+          - name: diode-gateway
+            image: netbox-cmdb-diode-gateway
+            dockerfile: image/diode-gateway/Dockerfile
+          - name: diode-bootstrap
+            image: netbox-cmdb-diode-bootstrap
+            dockerfile: image/diode-bootstrap/Dockerfile
+          - name: orb-agent
+            image: netbox-cmdb-orb-agent
+            dockerfile: image/orb-agent/Dockerfile
+          - name: docker-agent
+            image: netbox-cmdb-docker-agent
+            dockerfile: image/docker-agent/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/joblinours/${{ matrix.image }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short,prefix=sha-
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max
