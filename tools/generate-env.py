@@ -79,7 +79,7 @@ VARIABLES = [
     "Cloudflare Tunnel (read-only token: Account > Cloudflare Tunnel > Read)",
     ("CLOUDFLARE_API_TOKEN", "", None),
     ("CLOUDFLARE_ACCOUNT_ID", "", None),
-    ("CLOUDFLARE_TUNNEL_IDS", "", "optional, comma separated; empty = all tunnels"),
+    ("CLOUDFLARE_TUNNEL_IDS", "", "optional, tunnel IDs or names, comma separated; empty = all tunnels"),
     ("CLOUDFLARE_SYNC_INTERVAL", "1440", "minutes"),
     ("NGINX_PROXY_HOSTS", "", "IP(s) of revers-proxy, comma separated: origin = this host -> 'via Nginx'"),
     "Network scan (orb-agent)",

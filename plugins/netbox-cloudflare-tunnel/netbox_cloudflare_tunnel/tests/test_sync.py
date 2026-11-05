@@ -149,6 +149,11 @@ class SyncTest(TestCase):
         mail_service.refresh_from_db()
         self.assertIsNone(mail_service.custom_field_data.get("public_url"))
 
+    def test_tunnel_filter_by_id_or_name(self):
+        for value in (TUNNEL_ID.upper(), "Homelab", " homelab "):
+            self.assertEqual(sync(FakeClient(self._ingress()), {**SETTINGS, "tunnel_ids": [value]}).tunnels, 1)
+        self.assertEqual(sync(FakeClient(self._ingress()), {**SETTINGS, "tunnel_ids": ["other"]}).tunnels, 0)
+
     def test_local_tunnel_skipped(self):
         result = sync(FakeClient(self._ingress(), config_src="local"), SETTINGS)
         self.assertEqual(result.hostnames, 0)

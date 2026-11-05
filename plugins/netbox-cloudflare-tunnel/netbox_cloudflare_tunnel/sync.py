@@ -220,9 +220,14 @@ def reconcile_rule(tunnel, rule, settings):
 def sync(client, settings, log=logger):
     """Run one full sync. ``client`` is a CloudflareClient (or a test double)."""
     result = SyncResult()
-    wanted_ids = {str(t).lower() for t in (settings.get("tunnel_ids") or []) if t}
+    # CLOUDFLARE_TUNNEL_IDS accepts tunnel IDs or tunnel names
+    wanted_ids = {str(t).strip().lower() for t in (settings.get("tunnel_ids") or []) if str(t).strip()}
     now = timezone.now()
-    remote_tunnels = [t for t in client.list_tunnels() if not wanted_ids or str(t.get("id")).lower() in wanted_ids]
+    remote_tunnels = [
+        t
+        for t in client.list_tunnels()
+        if not wanted_ids or {str(t.get("id")).lower(), str(t.get("name") or "").lower()} & wanted_ids
+    ]
 
     with transaction.atomic():
         previous_services = set(
