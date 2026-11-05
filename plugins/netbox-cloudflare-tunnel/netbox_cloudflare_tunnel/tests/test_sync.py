@@ -175,3 +175,21 @@ class SyncTest(TestCase):
             PublicHostname.objects.first().get_absolute_url(),
         ):
             self.assertEqual(self.client.get(url).status_code, 200, url)
+
+
+class JobTest(TestCase):
+    def test_zero_tunnels_is_a_failure(self):
+        from netbox.jobs import JobFailed
+        from netbox_cmdb.models import SourceStatus
+
+        from netbox_cloudflare_tunnel import jobs
+
+        class Empty(FakeClient):
+            def list_tunnels(self):
+                return []
+
+        with mock.patch.object(jobs, "CloudflareClient", return_value=Empty([])):
+            with self.assertRaises(JobFailed):
+                jobs.run_sync()
+        self.assertEqual(SourceStatus.objects.get(name="cloudflare").status, "failed")
+        self.assertIn("No tunnel visible", SourceStatus.objects.get(name="cloudflare").message)

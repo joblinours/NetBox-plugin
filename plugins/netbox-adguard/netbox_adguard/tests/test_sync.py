@@ -51,6 +51,11 @@ class ClientTest(SimpleTestCase):
         self.assertFalse(rw[1]["enabled"])
         self.assertEqual(session.auth, ("u", "p"))
 
+    def test_url_without_scheme(self):
+        self.assertEqual(AdGuardClient("192.168.1.3").base_url, "http://192.168.1.3")
+        self.assertEqual(AdGuardClient(" 192.168.1.3:3000/ ").base_url, "http://192.168.1.3:3000")
+        self.assertEqual(AdGuardClient("https://ag.lan/").base_url, "https://ag.lan")
+
     def test_auth_error(self):
         session = mock.Mock()
         session.get.return_value = mock.Mock(status_code=401)

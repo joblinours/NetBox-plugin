@@ -9,7 +9,10 @@ class AdGuardError(Exception):
 
 class AdGuardClient:
     def __init__(self, base_url, username="", password="", verify_ssl=True, timeout=20, session=None):
-        self.base_url = base_url.rstrip("/")
+        base_url = base_url.strip().rstrip("/")
+        if "://" not in base_url:  # "192.168.1.3" or "192.168.1.3:3000"
+            base_url = f"http://{base_url}"
+        self.base_url = base_url
         self.timeout = timeout
         self.verify = verify_ssl
         self.session = session or requests.Session()
